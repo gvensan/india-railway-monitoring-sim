@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Train Monitoring POC</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚂</text></svg>">
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="assets/styles/style.css" />
+</head>
+<body>
+    <div class="container">
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
+        
+        <!-- Floating toggle button for collapsed sidebar -->
+        <button id="floatingToggleBtn" class="floating-toggle-btn" title="Train Monitoring System">🚂</button>
+        
+        <!-- Events floating button in bottom left -->
+        <button id="eventsFloatingBtn" class="events-floating-btn" title="Events">
+            <img src="assets/images/events.png" alt="Events" />
+        </button>
+        
+        <!-- Alert floating button in bottom right -->
+        <button id="alertFloatingBtn" class="alert-floating-btn" title="Alert Controls">
+            <img src="assets/images/alertcontrol.png" alt="Alert Controls" />
+        </button>
+        
+        <div class="control-panel">
+            <div class="header">
+                <div class="header-content">
+                    <div class="header-text">
+                <h1>Train Monitoring System</h1>
+                    </div>
+                    <button id="toggleSidebarBtn" class="toggle-btn" title="Toggle Sidebar">🚂</button>
+                </div>
+            </div>
+
+            <div class="control-sections-container">
+            <div class="control-section">
+                <h3>Simulation Controls</h3>
+                <div class="controls">
+                    <button id="playBtn" class="btn btn-primary">▶️ Play</button>
+                    <button id="pauseBtn" class="btn btn-secondary">⏸️ Pause</button>
+                    <button id="stopBtn" class="btn btn-danger">⏹️ Stop</button>
+                </div>
+                
+                <div class="speed-control">
+                    <div class="speed-label">
+                        <span>Speed</span>
+                        <span id="speedValue">1x</span>
+                    </div>
+                    <input type="range" id="speedSlider" class="speed-slider" min="1" max="10" value="1">
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>Train Information</h3>
+                <div class="info-display">
+                    <div class="info-item">
+                        <span class="info-label">Train Number:</span>
+                        <span class="info-value" id="train-number">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Train Name:</span>
+                        <span class="info-value" id="train-name">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value">
+                            <span id="statusIndicator" class="status-indicator status-stopped"></span>
+                            <span id="trainStatus">No Train Selected</span>
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Current Station:</span>
+                        <span class="info-value" id="current-station">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Next Station:</span>
+                        <span class="info-value" id="next-station">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Speed:</span>
+                        <span class="info-value" id="train-speed">0 km/h</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Distance to Next:</span>
+                        <span class="info-value" id="distance">0 km</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Distance Covered:</span>
+                        <span class="info-value" id="distance-covered">0 km</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">ETA to Next:</span>
+                        <span class="info-value" id="eta">--:--</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Route Mode:</span>
+                        <span class="info-value" id="route-mode">Station-based Waypoints</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Progress:</span>
+                        <span class="info-value" id="station-progress">-</span>
+                    </div>
+                </div>
+                
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div style="text-align: center; font-size: 11px; color: #666;">
+                    Progress: <span id="progressText">0%</span>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h3>Train Selection</h3>
+                <div class="train-search">
+                    <select id="trainDropdown" class="train-input">
+                        <option value="">Select a train...</option>
+                    </select>
+                    <button id="selectTrainBtn" class="btn btn-primary">🚂 Load</button>
+                </div>
+            </div>
+
+
+            <div class="control-section">
+                <h3>Quick Actions</h3>
+                <div class="quick-actions">
+                    <button id="toggleLayersBtn" class="quick-btn">🚂 Hide Railway Map</button>
+                    <button id="showTrainBtn" class="quick-btn" disabled>🚂 Show Train</button>
+                    <button id="centerMapBtn" class="quick-btn">🎯 Center Map</button>
+                    <button id="resetBtn" class="quick-btn">🔄 Reset</button>
+                </div>
+            </div>
+            </div>
+
+        </div>
+        
+        <!-- Right sidebar for events -->
+        <div id="leftSidebar" class="right-sidebar">
+            <div class="right-sidebar-header">
+                <h2>Events</h2>
+                <div class="event-controls">
+                    <button id="clearEventsBtn" class="clear-events-btn" title="Clear All Events">🗑️</button>
+                    <button id="closeRightSidebarBtn" class="close-right-sidebar-btn" title="Close Events">
+                        <img src="assets/images/events.png" alt="Events" />
+                    </button>
+                </div>
+            </div>
+            <div class="right-sidebar-content">
+                <div class="event-filters">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="train">🚂 Train</button>
+                    <button class="filter-btn" data-filter="station">🚉 Station</button>
+                    <button class="filter-btn" data-filter="alert">⚠️ Alert</button>
+                </div>
+                <div class="auto-clean-toggle">
+                    <label class="toggle-label">
+                        <input type="checkbox" id="autoCleanToggle" checked>
+                        <span class="toggle-text">🧹 Auto-clean events (100 max)</span>
+                    </label>
+                </div>
+                <div id="eventsList" class="events-list">
+                    <div class="no-events">
+                        <p>No events yet</p>
+                        <small>Events will appear here as they are received</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Alert bottom panel -->
+    <div id="alertBottomPanel" class="alert-bottom-panel">
+        <div class="alert-bottom-panel-header">
+            <h2>Alert Controls</h2>
+            <button id="closeAlertPanelBtn" class="close-alert-panel-btn" title="Close Alert Controls">
+                <img src="assets/images/alertcontrol.png" alt="Alert Controls" />
+            </button>
+        </div>
+        <div class="alert-bottom-panel-content">
+            <div class="train-icons-grid" id="trainIconsGrid">
+                <!-- Train icons will be dynamically generated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Solace JS API -->
+    <script src="scripts/solclient.js"></script>
+    
+    <!-- Solace Integration Script -->
+    <script src="scripts/solace-integration.js"></script>
+    
+    <!-- Event Manager Script -->
+    <script src="scripts/event-manager.js"></script>
+    
+    <!-- Train Monitoring JavaScript -->
+    <script src="scripts/train-monitoring.js"></script>
+</body>
+</html>
