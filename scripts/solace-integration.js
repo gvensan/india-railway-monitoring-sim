@@ -12,16 +12,35 @@ class SolaceTrainMonitor {
         this.subscriptions = new Set();
         this.messageHandlers = new Map();
         
-        // Default Solace broker settings for local machine
-        this.brokerConfig = {
+        // Get broker configuration from external config file
+        this.brokerConfig = this.getBrokerConfiguration();
+        
+        console.log('🚂 SolaceTrainMonitor initialized with config:', this.brokerConfig);
+    }
+
+    /**
+     * Get broker configuration from external config file
+     * @returns {Object} Broker configuration object
+     */
+    getBrokerConfiguration() {
+        // Check if BrokerConfig is available globally
+        if (typeof window !== 'undefined' && window.BrokerConfig) {
+            return window.BrokerConfig.getDefaultBrokerConfig();
+        }
+        
+        // Fallback to default configuration if external config is not available
+        console.warn('⚠️ BrokerConfig not found, using fallback configuration');
+        return {
             url: 'ws://localhost:8008',
             vpnName: 'default',
             userName: 'default',
             password: 'default',
-            clientName: 'train-monitor-' + Date.now()
+            clientName: 'train-monitor-' + Date.now(),
+            connectionTimeout: 10000,
+            reconnectRetries: 5,
+            reconnectInterval: 3000,
+            logLevel: 'INFO'
         };
-        
-        console.log('🚂 SolaceTrainMonitor initialized with config:', this.brokerConfig);
     }
 
     /**
