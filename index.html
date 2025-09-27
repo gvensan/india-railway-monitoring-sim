@@ -32,14 +32,17 @@
         </button>
         
         <div class="control-panel">
-            <div class="header">
-                <div class="header-content">
-                    <div class="header-text">
+        <div class="header">
+            <div class="header-content">
+                <div class="header-text">
                 <h1>Train Monitoring System</h1>
-                    </div>
+                </div>
+                <div class="header-buttons">
+                    <button id="aboutBtn" class="about-btn" title="About">ℹ️</button>
                     <button id="toggleSidebarBtn" class="toggle-btn" title="Toggle Sidebar">🚂</button>
                 </div>
             </div>
+        </div>
 
             <div class="control-sections-container">
             <div class="control-section">
@@ -198,6 +201,9 @@
     <!-- Solace JS API -->
     <script src="scripts/solclient.js"></script>
     
+    <!-- About Dialog -->
+    <script src="scripts/about-dialog.js"></script>
+    
     <!-- Broker Configuration -->
     <script src="scripts/broker-config.js"></script>
     
@@ -216,9 +222,81 @@
     <!-- Train Monitoring JavaScript -->
     <script src="scripts/train-monitoring.js"></script>
     
-    <!-- Test Dual Broker Implementation (remove in production) -->
-    <script src="scripts/test-dual-broker.js"></script>
+    <!-- Test Dual Broker Implementation (removed for production) -->
     
+    <!-- About Dialog -->
+    <div id="about-dialog" class="about-dialog-overlay" style="display: none;">
+        <div class="about-dialog">
+            <div class="about-dialog-header">
+                <h3>🚂 About Train Monitoring System</h3>
+                <button class="about-dialog-close" onclick="closeAboutDialog()">&times;</button>
+            </div>
+            <div class="about-dialog-content">
+                <div class="about-section">
+                    <h4>🎯 Overview</h4>
+                    <p>This is a comprehensive real-time train monitoring and simulation system for Indian Railways, featuring interactive maps, multi-train tracking, alert management, and event monitoring capabilities.</p>
+                </div>
+                
+                <div class="about-section">
+                    <h4>🆕 Recent Updates</h4>
+                    <ul>
+                        <li><strong>Enhanced Alert Management:</strong> Improved alert tracking with proper unserved alert handling at destination stations</li>
+                        <li><strong>Dual Broker Support:</strong> Primary Solace PubSub+ integration with intelligent fallback to in-memory broker</li>
+                        <li><strong>Advanced Event Processing:</strong> Comprehensive event lifecycle management with detailed logging</li>
+                        <li><strong>Improved UI/UX:</strong> Enhanced tooltips, better visual indicators, and responsive design</li>
+                        <li><strong>Data Validation:</strong> Fixed station coordinate data and improved data integrity</li>
+                        <li><strong>Performance Optimizations:</strong> Better memory management and reduced console noise</li>
+                    </ul>
+                </div>
+                
+                <div class="about-section">
+                    <h4>🔧 Key Features</h4>
+                    <ul>
+                        <li><strong>Real-time Monitoring:</strong> Live train tracking with interactive maps</li>
+                        <li><strong>Alert Management:</strong> Complete alert lifecycle from raised to served/missed/unserved</li>
+                        <li><strong>Event Streaming:</strong> Comprehensive event logging and filtering</li>
+                        <li><strong>Multi-train Support:</strong> Monitor multiple trains simultaneously</li>
+                        <li><strong>Broker Integration:</strong> Solace PubSub+ with in-memory fallback</li>
+                        <li><strong>Responsive Design:</strong> Works on desktop, tablet, and mobile devices</li>
+                    </ul>
+                </div>
+                
+                <div class="about-section">
+                    <h4>🛠️ Technical Stack</h4>
+                    <ul>
+                        <li><strong>Frontend:</strong> HTML5, CSS3, JavaScript ES6+</li>
+                        <li><strong>Mapping:</strong> Leaflet.js with OpenStreetMap</li>
+                        <li><strong>Messaging:</strong> Solace PubSub+ with in-memory broker fallback</li>
+                        <li><strong>Data:</strong> Indian Railways train schedules and station coordinates</li>
+                    </ul>
+                </div>
+                
+                <div class="about-section">
+                    <h4>📊 System Status</h4>
+                    <div class="status-indicators">
+                        <div class="status-item">
+                            <span class="status-label">Broker Connection:</span>
+                            <span id="about-broker-status" class="status-value">Checking...</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Event Manager:</span>
+                            <span id="about-event-status" class="status-value">Active</span>
+                        </div>
+                        <div class="status-item">
+                            <span class="status-label">Train Monitor:</span>
+                            <span id="about-train-status" class="status-value">Ready</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="about-footer">
+                    <p><strong>Version:</strong> 2.0.0 | <strong>Last Updated:</strong> September 2025</p>
+                    <p>Built with ❤️ for Indian Railways monitoring and simulation</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Broker Configuration Dialog -->
     <div id="broker-config-dialog" class="broker-dialog-overlay" style="display: none;">
         <div class="broker-dialog">
@@ -233,16 +311,23 @@
                             <input type="radio" name="brokerType" value="inmemory" checked>
                             <span class="broker-type-option">
                                 <strong>🧠 In-Memory Broker</strong>
-                                <small>Local simulation without external broker</small>
+                                <small>Local simulation without external broker (Recommended for hosted environments)</small>
                             </span>
                         </label>
                         <label class="broker-type-label">
                             <input type="radio" name="brokerType" value="solace">
                             <span class="broker-type-option">
                                 <strong>☁️ Solace PubSub+ Broker</strong>
-                                <small>Connect to external Solace broker</small>
+                                <small>Connect to external Solace broker (Requires local broker setup)</small>
                             </span>
                         </label>
+                    </div>
+                    
+                    <div id="hosted-environment-note" class="hosted-environment-note" style="display: none;">
+                        <div class="note-content">
+                            <strong>🌐 Hosted Environment Detected</strong>
+                            <p>You're running this application in a hosted environment (GitHub Pages, etc.). The In-Memory Broker is recommended as it doesn't require external broker setup.</p>
+                        </div>
                     </div>
                     
                     <div id="solace-config-fields" class="solace-config-fields" style="display: none;">

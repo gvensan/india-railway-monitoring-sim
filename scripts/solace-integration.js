@@ -939,6 +939,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Create global instance
         window.solaceTrainMonitor = new SolaceTrainMonitor();
         
+        // Auto-connect based on environment and configuration
+        if (window.solaceTrainMonitor.brokerConfig.brokerType === 'inmemory') {
+            console.log('🧠 Auto-connecting to in-memory broker (configured for hosted environment)');
+            window.solaceTrainMonitor.connectToInMemoryBroker();
+        } else {
+            console.log('☁️ Auto-connecting to Solace broker');
+            window.solaceTrainMonitor.connect();
+        }
+        
         console.log('🚂 Solace integration ready. Use window.solaceTrainMonitor to interact with the broker.');
         
     } catch (error) {

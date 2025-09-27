@@ -24,6 +24,7 @@ class BrokerConfigDialog {
         this.dialog = document.getElementById('broker-config-dialog');
         this.form = document.getElementById('broker-config-form');
         this.solaceFields = document.getElementById('solace-config-fields');
+        this.hostedNote = document.getElementById('hosted-environment-note');
 
         if (!this.dialog || !this.form || !this.solaceFields) {
             console.error('❌ Broker configuration dialog elements not found');
@@ -71,7 +72,23 @@ class BrokerConfigDialog {
         try {
             // Get current broker configuration
             const currentConfig = window.BrokerConfig ? window.BrokerConfig.getBrokerConfig() : null;
-            const currentBrokerType = window.brokerMode || 'inmemory';
+            let currentBrokerType = window.brokerMode || 'inmemory';
+            
+            // Check if we're in a hosted environment and set appropriate default
+            if (window.BrokerConfig && window.BrokerConfig.isHostedEnvironment()) {
+                currentBrokerType = 'inmemory';
+                console.log('🌐 Hosted environment detected, defaulting to in-memory broker');
+                
+                // Show hosted environment note
+                if (this.hostedNote) {
+                    this.hostedNote.style.display = 'block';
+                }
+            } else {
+                // Hide hosted environment note for local environments
+                if (this.hostedNote) {
+                    this.hostedNote.style.display = 'none';
+                }
+            }
 
             // Set broker type
             const brokerTypeRadio = this.form.querySelector(`input[name="brokerType"][value="${currentBrokerType}"]`);

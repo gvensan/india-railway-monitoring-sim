@@ -88,6 +88,27 @@ body {
     align-items: center;
 }
 
+.header-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.about-btn {
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+    color: #333;
+}
+
+.about-btn:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
 .header-text {
     text-align: center;
     flex: 1;
@@ -1442,6 +1463,169 @@ body {
     }
 }
 
+/* About Dialog Styles */
+.about-dialog-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+}
+
+.about-dialog {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    animation: slideIn 0.3s ease-out;
+}
+
+.about-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 25px;
+    border-bottom: 1px solid #e0e0e0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px 12px 0 0;
+}
+
+.about-dialog-header h3 {
+    margin: 0;
+    font-size: 1.4em;
+    font-weight: 600;
+}
+
+.about-dialog-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.about-dialog-close:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.about-dialog-content {
+    padding: 25px;
+}
+
+.about-section {
+    margin-bottom: 25px;
+}
+
+.about-section h4 {
+    color: #333;
+    margin: 0 0 12px 0;
+    font-size: 1.1em;
+    font-weight: 600;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 5px;
+}
+
+.about-section p {
+    color: #666;
+    line-height: 1.6;
+    margin: 0 0 10px 0;
+}
+
+.about-section ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.about-section li {
+    color: #666;
+    line-height: 1.6;
+    margin-bottom: 8px;
+}
+
+.about-section strong {
+    color: #333;
+}
+
+.status-indicators {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    border: 1px solid #e9ecef;
+}
+
+.status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.status-item:last-child {
+    margin-bottom: 0;
+}
+
+.status-label {
+    font-weight: 500;
+    color: #333;
+}
+
+.status-value {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+.status-value.connected {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-value.active {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+.status-value.ready {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.status-value.disconnected {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.about-footer {
+    margin-top: 25px;
+    padding-top: 20px;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+}
+
+.about-footer p {
+    margin: 5px 0;
+    color: #666;
+    font-size: 0.9em;
+}
+
 /* Broker Configuration Dialog Styles */
 .broker-dialog-overlay {
     position: fixed;
@@ -1549,6 +1733,27 @@ body {
 .broker-type-option small {
     color: #666;
     font-size: 12px;
+}
+
+.hosted-environment-note {
+    background: #e3f2fd;
+    border: 1px solid #2196f3;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 15px 0;
+}
+
+.hosted-environment-note .note-content strong {
+    color: #1976d2;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.hosted-environment-note .note-content p {
+    margin: 0;
+    color: #424242;
+    font-size: 0.9em;
+    line-height: 1.4;
 }
 
 .solace-config-fields {

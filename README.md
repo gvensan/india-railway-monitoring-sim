@@ -6,6 +6,15 @@ A comprehensive real-time train monitoring and simulation system for Indian Rail
 
 This proof-of-concept demonstrates a production-ready train monitoring system with enterprise-grade features including real-time messaging, multi-train support, and robust data integration. The system provides an intuitive interface for monitoring train movements, managing alerts, and tracking events across railway networks.
 
+### 🆕 Recent Updates
+
+- **Enhanced Alert Management**: Improved alert tracking with proper unserved alert handling at destination stations
+- **Dual Broker Support**: Primary Solace PubSub+ integration with intelligent fallback to in-memory broker
+- **Advanced Event Processing**: Comprehensive event lifecycle management with detailed logging and debugging
+- **Improved UI/UX**: Enhanced tooltips, better visual indicators, and responsive design improvements
+- **Data Validation**: Fixed station coordinate data and improved data integrity
+- **Performance Optimizations**: Better memory management and reduced console noise
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -69,6 +78,12 @@ The application features a responsive design with three main areas:
 - **🎯 Center Map** - Reset map view to default position
 - **🔄 Reset** - Reset entire simulation to initial state
 
+### Broker Configuration
+- **⚙️ Broker Settings** - Configure Solace PubSub+ connection parameters
+- **🔗 Connection Status** - Visual indicator showing broker connection state
+- **🔄 Auto-fallback** - Automatic fallback to in-memory broker when Solace unavailable
+- **📊 Status Monitoring** - Real-time connection status with detailed tooltips
+
 ## 🚂 Train Selection & Loading
 
 ### Train Selection Process
@@ -107,17 +122,20 @@ The application features a responsive design with three main areas:
 - **Route Visualization** - Complete railway route display
 
 ### Visual Elements
-- **Train Marker** - Animated train icon with rotation
+- **Train Marker** - Animated train icon with rotation and tooltips
 - **Movement Trail** - Red polyline showing train path
-- **Station Markers** - Red circular markers with station names
-- **Alert Flags** - Visual indicators for active alerts
+- **Station Markers** - Red circular markers with station names and tooltips
+- **Origin/Destination Markers** - Blue circular markers for start/end stations
+- **Alert Flags** - Visual indicators for active alerts with blinking animations
+- **Broker Status Indicator** - Top-center indicator showing connection status
 
 ## 📋 Event Management
 
 ### Event Types
-- **🚂 Train Events** - Departure, arrival, speed changes
-- **🚉 Station Events** - Platform assignments, delays
-- **⚠️ Alert Events** - System alerts and notifications
+- **🚂 Train Events** - Departure, arrival, speed changes, destination reached
+- **🚉 Station Events** - Platform assignments, delays, station arrivals/departures
+- **⚠️ Alert Events** - Alert raised, missed, served, and unserved events
+- **🚫 Unserved Events** - Alerts that remain unserved when train reaches destination
 
 ### Event Features
 - **Real-time Updates** - Live event streaming
@@ -136,23 +154,28 @@ The application features a responsive design with three main areas:
 ## ⚠️ Alert Management
 
 ### Alert Types
-- **Delay Alert** - Train running behind schedule
+- **Water Tank Alert** - Water tank issues requiring service
 - **Breakdown Alert** - Mechanical or technical issues
 - **AC Malfunction** - Air conditioning problems
 - **Emergency Alert** - Critical safety issues
 
 ### Alert Features
-- **Visual Flags** - Map-based alert indicators
-- **Alert Grid** - Train-specific alert controls
-- **Raise Alerts** - Manual alert creation
-- **Alert Status** - Track alert lifecycle
-- **Event Integration** - Alerts appear in event stream
+- **Visual Flags** - Map-based alert indicators with blinking animations
+- **Alert Grid** - Train-specific alert controls and management
+- **Raise Alerts** - Manual alert creation with station targeting
+- **Alert Status** - Complete alert lifecycle tracking (received, served, missed, unserved)
+- **Event Integration** - Comprehensive alert events in event stream
+- **Smart Movement** - Alerts automatically move to next station when train departs
+- **Destination Handling** - Unserved alerts properly processed at train destination
 
 ### Alert Workflow
 1. **Raise Alert** - Click train icon to raise specific alert type
-2. **Visual Indicator** - Alert flag appears on map
-3. **Event Logging** - Alert recorded in event stream
-4. **Status Tracking** - Monitor alert resolution
+2. **Visual Indicator** - Alert flag appears on map at next station
+3. **Event Logging** - Alert raised event recorded in event stream
+4. **Movement Tracking** - Alert moves to next station if not served
+5. **Missed Events** - Missed alert events when train departs without service
+6. **Re-raising** - Alerts re-raised at new stations with proper timestamps
+7. **Destination Processing** - Unserved alerts published when train reaches destination
 
 ## 🔧 Advanced Features
 
@@ -163,10 +186,13 @@ The application features a responsive design with three main areas:
 - **State Management** - Independent train states
 
 ### Real-time Messaging (Solace Integration)
-- **PubSub+ Broker** - Enterprise messaging infrastructure
-- **Event Streaming** - Real-time event distribution
-- **Topic Subscriptions** - Targeted event filtering
-- **Message Publishing** - Broadcast train updates
+- **PubSub+ Broker** - Enterprise messaging infrastructure with intelligent fallback
+- **Dual Broker System** - Primary Solace PubSub+ with in-memory broker fallback
+- **Event Streaming** - Real-time event distribution and processing
+- **Topic Subscriptions** - Targeted event filtering and management
+- **Message Publishing** - Broadcast train updates and alert notifications
+- **Connection Management** - Smart retry logic and connection status indicators
+- **Broker Configuration** - Dynamic broker settings with UI configuration dialog
 
 ### Data Integration
 - **OpenStreetMap** - Real railway infrastructure data
@@ -200,13 +226,17 @@ The application features a responsive design with three main areas:
 - **OpenStreetMap** - Railway infrastructure via Overpass API
 - **Thunderforest** - Enhanced transport mapping
 - **Indian Railways** - Train schedules and station data
-- **Local CSV** - Station coordinates and train information
+- **Local CSV** - Validated station coordinates and train information
+- **Solace PubSub+** - Real-time messaging and event streaming
+- **In-Memory Broker** - Fallback messaging system for offline operation
 
 ### Performance Features
-- **Coordinate Caching** - Optimized data retrieval
-- **Efficient Rendering** - Smooth 60fps animations
-- **Memory Management** - Limited event history
-- **Lazy Loading** - On-demand data fetching
+- **Coordinate Caching** - Optimized data retrieval and validation
+- **Efficient Rendering** - Smooth 60fps animations with optimized markers
+- **Memory Management** - Limited event history with auto-cleanup
+- **Lazy Loading** - On-demand data fetching and processing
+- **Smart Connection Management** - Intelligent broker connection handling
+- **Duplicate Prevention** - Advanced alert deduplication and filtering
 
 ## 🔍 Troubleshooting
 
@@ -225,10 +255,11 @@ The application features a responsive design with three main areas:
 - Reset simulation if needed
 
 #### Events Not Appearing
-- Check Solace connection (if enabled)
-- Verify event filters
+- Check broker connection status (top-center indicator)
+- Verify event filters are set correctly
 - Clear and reload events
-- Check browser console for errors
+- Check browser console for detailed error logs
+- Ensure in-memory broker is functioning as fallback
 
 #### Performance Issues
 - Reduce simulation speed
@@ -256,6 +287,27 @@ The application features a responsive design with three main areas:
 - **Storage** - 100MB+
 - **Network** - High-speed internet
 - **Browser** - Latest version
+
+## 🆕 Latest Features & Improvements
+
+### Enhanced Alert System
+- **Complete Alert Lifecycle** - Full tracking from raised to served/missed/unserved
+- **Smart Alert Movement** - Automatic movement to next station when train departs
+- **Destination Processing** - Proper handling of unserved alerts at train destination
+- **Visual Feedback** - Blinking alert flags with detailed tooltips
+- **Event Integration** - Comprehensive alert events in the event stream
+
+### Dual Broker Architecture
+- **Primary Solace PubSub+** - Enterprise-grade messaging infrastructure
+- **In-Memory Fallback** - Seamless fallback when Solace is unavailable
+- **Connection Management** - Smart retry logic and connection status monitoring
+- **Configuration UI** - Dynamic broker settings with user-friendly interface
+
+### Improved User Experience
+- **Enhanced Tooltips** - Detailed information on hover for trains and stations
+- **Visual Indicators** - Clear origin/destination markers and broker status
+- **Responsive Design** - Better mobile and tablet support
+- **Performance Optimizations** - Reduced console noise and improved memory management
 
 ## 🚀 Future Enhancements
 

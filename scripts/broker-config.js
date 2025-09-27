@@ -74,10 +74,41 @@ function getBrokerConfig(environment = 'development') {
 }
 
 /**
+ * Detect if we're running in a hosted environment (GitHub Pages, etc.)
+ * @returns {boolean} True if running in hosted environment
+ */
+function isHostedEnvironment() {
+    // Check if we're running on GitHub Pages or other hosted environments
+    const hostname = window.location.hostname;
+    return hostname.includes('github.io') || 
+           hostname.includes('netlify.app') || 
+           hostname.includes('vercel.app') ||
+           hostname.includes('herokuapp.com') ||
+           hostname !== 'localhost' && !hostname.startsWith('127.0.0.1') && !hostname.startsWith('192.168.');
+}
+
+/**
  * Get default broker configuration
  * @returns {Object} Default broker configuration object
  */
 function getDefaultBrokerConfig() {
+    // If we're in a hosted environment, default to in-memory broker
+    if (isHostedEnvironment()) {
+        console.log('🌐 Detected hosted environment, defaulting to in-memory broker');
+        return {
+            brokerType: 'inmemory',
+            url: 'ws://localhost:8008', // This won't be used for in-memory
+            vpnName: 'default',
+            userName: 'default',
+            password: 'default',
+            clientName: `train-monitor-${Date.now()}`,
+            connectionTimeout: 10000,
+            reconnectRetries: 5,
+            reconnectInterval: 3000,
+            logLevel: 'INFO'
+        };
+    }
+    
     return getBrokerConfig('development');
 }
 
@@ -115,7 +146,8 @@ if (typeof module !== 'undefined' && module.exports) {
         getBrokerConfig,
         getDefaultBrokerConfig,
         updateDefaultConfig,
-        getStoredBrokerConfig
+        getStoredBrokerConfig,
+        isHostedEnvironment
     };
 }
 
@@ -127,6 +159,7 @@ if (typeof window !== 'undefined') {
         getBrokerConfig,
         getDefaultBrokerConfig,
         updateDefaultConfig,
-        getStoredBrokerConfig
+        getStoredBrokerConfig,
+        isHostedEnvironment
     };
 }
