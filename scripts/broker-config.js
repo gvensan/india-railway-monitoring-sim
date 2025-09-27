@@ -34,7 +34,7 @@ const BROKER_CONFIG = {
 // Environment-specific configurations
 const ENVIRONMENT_CONFIGS = {
     development: {
-        url: 'ws://localhost:8008',
+        url: 'ws://localhost1:8008',
         vpnName: 'default',
         userName: 'default',
         password: 'default'
@@ -81,13 +81,41 @@ function getDefaultBrokerConfig() {
     return getBrokerConfig('development');
 }
 
+/**
+ * Update the default broker configuration dynamically
+ */
+function updateDefaultConfig(newConfig) {
+    if (newConfig && typeof newConfig === 'object') {
+        // Update the default configuration
+        Object.assign(BROKER_CONFIG, newConfig);
+        console.log('✅ Default broker configuration updated:', BROKER_CONFIG);
+    }
+}
+
+/**
+ * Get stored broker configuration from localStorage
+ */
+function getStoredBrokerConfig() {
+    try {
+        const stored = localStorage.getItem('brokerConfig');
+        if (stored) {
+            return JSON.parse(stored);
+        }
+    } catch (error) {
+        console.error('❌ Error reading stored broker configuration:', error);
+    }
+    return null;
+}
+
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         BROKER_CONFIG,
         ENVIRONMENT_CONFIGS,
         getBrokerConfig,
-        getDefaultBrokerConfig
+        getDefaultBrokerConfig,
+        updateDefaultConfig,
+        getStoredBrokerConfig
     };
 }
 
@@ -97,6 +125,8 @@ if (typeof window !== 'undefined') {
         BROKER_CONFIG,
         ENVIRONMENT_CONFIGS,
         getBrokerConfig,
-        getDefaultBrokerConfig
+        getDefaultBrokerConfig,
+        updateDefaultConfig,
+        getStoredBrokerConfig
     };
 }

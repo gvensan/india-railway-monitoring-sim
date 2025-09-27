@@ -94,6 +94,12 @@ class EventManager {
                 this.handleAlertServedEvent(topic, payload, message);
             });
 
+            // Subscribe to alert unserved events
+            await window.solaceTrainMonitor.subscribe('tms/alert/unserved/>', (topic, payload, message) => {
+                console.log('🚫 Alert unserved event received:', topic);
+                this.handleAlertUnservedEvent(topic, payload, message);
+            });
+
             console.log('✅ Event subscriptions established');
         } catch (error) {
             console.error('❌ Failed to setup event subscriptions:', error);
@@ -198,7 +204,7 @@ class EventManager {
                 id: this.generateEventId(),
                 type: 'alert',
                 topic: topic,
-                timestamp: payload.timestamp,
+                timestamp: eventData.timestamp,
                 data: eventData,
                 brief: this.generateAlertRaisedEventBrief(eventData),
                 details: this.generateAlertEventDetails(eventData)
@@ -307,6 +313,37 @@ class EventManager {
             console.error('❌ Error handling alert served event:', error);
         }
     }
+
+    /**
+     * Handle alert unserved events
+     */
+    handleAlertUnservedEvent(topic, payload, message) {
+        try {
+            console.log('🚫 Processing alert unserved event:', topic, payload);
+            console.log('🚫 EventManager events count before:', this.events.length);
+            
+            const eventData = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            const event = {
+                id: this.generateEventId(),
+                type: 'alert_unserved',
+                topic: topic,
+                timestamp: new Date(),
+                data: eventData,
+                brief: this.generateAlertUnservedEventBrief(eventData),
+                details: this.generateAlertUnservedEventDetails(eventData)
+            };
+            
+            console.log('🚫 Created unserved event object:', event);
+            console.log('🚫 Adding unserved alert event to list:', event.brief);
+            
+            this.addEvent(event);
+            
+            console.log('🚫 EventManager events count after:', this.events.length);
+            console.log('🚫 Alert unserved event processed successfully:', eventData);
+        } catch (error) {
+            console.error('❌ Error handling alert unserved event:', error);
+        }
+    }
     
     /**
      * Track alert in the alert tracker
@@ -337,19 +374,32 @@ class EventManager {
         }
         
         const stationData = this.alertTracker.get(stationKey);
-        const alertRecord = {
-            id: this.generateEventId(),
-            type: type,
-            trainNumber: trainNumber,
-            trainName: alertData.trainName,
-            timestamp: alertData.timestamp,
-            status: 'received'
-        };
         
-        stationData.alerts.received.push(alertRecord);
-        stationData.summary.received++;
+        // Check if alert already exists to prevent duplicates
+        const existingAlert = stationData.alerts.received.find(existing => 
+            existing.type === type && 
+            existing.trainNumber === trainNumber &&
+            existing.raisedTime === (alertData.raisedTime || alertData.timestamp)
+        );
         
-        console.log(`📊 Alert tracked for station ${stationKey}:`, stationData.summary);
+        if (!existingAlert) {
+            const alertRecord = {
+                id: this.generateEventId(),
+                type: type,
+                trainNumber: trainNumber,
+                trainName: alertData.trainName,
+                timestamp: alertData.timestamp,
+                raisedTime: alertData.raisedTime || alertData.timestamp, // Preserve raisedTime field
+                status: 'received'
+            };
+            
+            stationData.alerts.received.push(alertRecord);
+            stationData.summary.received++;
+            
+            console.log(`📊 Alert tracked for station ${stationKey}:`, stationData.summary);
+        } else {
+            console.log(`⏭️ Skipping duplicate alert ${type} for train ${trainNumber} at station ${stationKey}`);
+        }
     }
 
     // Track missed alert in the alert tracker
@@ -451,7 +501,21 @@ class EventManager {
             // Move all unserved alerts from current station to next station
             const alertsToMove = [...currentStationData.alerts.received]; // Create a copy to avoid modification during iteration
             
-            alertsToMove.forEach(alert => {
+            // Remove duplicates from alertsToMove array based on alert ID
+            const uniqueAlertsToMove = alertsToMove.filter((alert, index, self) => 
+                index === self.findIndex(a => a.id === alert.id)
+            );
+            
+            if (uniqueAlertsToMove.length !== alertsToMove.length) {
+                console.log(`🔍 Removed ${alertsToMove.length - uniqueAlertsToMove.length} duplicate alerts from move operation`);
+            }
+            
+            console.log(`🔄 Moving ${uniqueAlertsToMove.length} unserved alerts from ${departureData.currentStationName} to ${departureData.nextStationName}`);
+            console.log(`🔍 Alerts to move:`, uniqueAlertsToMove.map(alert => ({ type: alert.type, trainNumber: alert.trainNumber, id: alert.id || 'no-id' })));
+            
+            uniqueAlertsToMove.forEach(alert => {
+                console.log(`📋 Moving alert: ${alert.type} for train ${alert.trainNumber} from ${departureData.currentStationName} to ${departureData.nextStationName}`);
+                
                 // Update alert with new station information first
                 const movedAlert = {
                     ...alert,
@@ -459,18 +523,32 @@ class EventManager {
                     nextStationName: departureData.nextStationName,
                     timestamp: new Date().toISOString(),
                     movedFrom: currentStation,
-                    movedFromName: departureData.currentStationName
+                    movedFromName: departureData.currentStationName,
+                    raisedTime: alert.raisedTime || alert.timestamp // Preserve original raised time
                 };
                 
-                // Publish missed alert event with updated station information
+                // Publish missed alert event for this move
+                console.log(`📤 Publishing missed event for alert ${movedAlert.type} at station ${departureData.currentStationName}`);
                 this.publishMissedAlertEvent(movedAlert, currentStation, departureData.currentStationName);
                 
-                // Add to next station's received alerts
-                nextStationData.alerts.received.push(movedAlert);
-                nextStationData.summary.received++;
+                // Publish alert raised event for next station
+                console.log(`📤 Publishing raised event for alert ${movedAlert.type} at next station ${departureData.nextStationName}`);
+                console.log(`⏰ Using raised time: ${movedAlert.raisedTime} (original alert raised time)`);
+                this.publishAlertRaisedEvent(movedAlert, nextStation, departureData.nextStationName, true);
                 
-                // Note: We don't publish a new alert raised event here because we're just moving
-                // the alert internally. The alert was already published when it was originally raised.
+                // Check if alert already exists in next station to prevent duplicates
+                const existingAlert = nextStationData.alerts.received.find(existing => 
+                    existing.id === movedAlert.id
+                );
+                
+                if (!existingAlert) {
+                    // Add to next station's received alerts only if it doesn't already exist
+                    nextStationData.alerts.received.push(movedAlert);
+                    nextStationData.summary.received++;
+                    console.log(`✅ Added alert ${movedAlert.type} for train ${movedAlert.trainNumber} to station ${nextStation}`);
+                } else {
+                    console.log(`⏭️ Skipping duplicate alert ${movedAlert.type} for train ${movedAlert.trainNumber} at station ${nextStation}`);
+                }
             });
             
             // Clear current station's unserved alerts (remove from received array)
@@ -479,9 +557,16 @@ class EventManager {
             
             // Update flag on map for next station
             if (window.trainMonitorInstance && nextStationData.summary.received > 0) {
-                console.log(`🚩 Updating flag for next station ${nextStation} with ${nextStationData.summary.received} alerts`);
+                const summaryCount = nextStationData.summary.received;
+                const actualCount = nextStationData.alerts.received.length;
+                console.log(`🚩 Updating flag for next station ${nextStation} with ${summaryCount} alerts (summary) vs ${actualCount} alerts (actual)`);
                 console.log(`🚩 Next station alert tracker state:`, nextStationData.summary);
-                window.trainMonitorInstance.updateAlertFlag(nextStation, nextStationData.summary.received);
+                console.log(`🚩 Alert details for next station:`, nextStationData.alerts.received);
+                
+                // Use actual count instead of summary count
+                window.trainMonitorInstance.updateAlertFlag(nextStation, actualCount);
+            } else {
+                console.log(`🚩 Not updating flag - trainMonitorInstance: ${!!window.trainMonitorInstance}, alerts: ${nextStationData?.summary?.received || 0}`);
             }
         }
         
@@ -524,7 +609,7 @@ class EventManager {
             lat: alertData.lat || 0,
             lon: alertData.lon || 0,
             timestamp: new Date().toISOString(),
-            originalTimestamp: alertData.timestamp,
+            raisedTime: alertData.raisedTime || alertData.timestamp, // Preserve original raised time
             reason: 'train_departed_without_service'
         };
         
@@ -534,6 +619,46 @@ class EventManager {
             })
             .catch(error => {
                 console.error('❌ Failed to publish missed alert event:', error);
+            });
+    }
+
+    // Publish alert raised event when alert is moved to next station
+    publishAlertRaisedEvent(alertData, nextStation, nextStationName, reraised = false) {
+        if (!window.solaceTrainMonitor) {
+            console.warn('🚩 Solace integration not available for publishing alert raised event');
+            return;
+        }
+        
+        const topic = `tms/alert/raised/${alertData.type}/${alertData.trainNumber}/${nextStation}`;
+        
+        if (reraised) {
+            console.log(`📤 Publishing alert re-raised event to topic: ${topic}`);
+        }
+        const payload = {
+            type: alertData.type,
+            trainNumber: alertData.trainNumber,
+            trainName: alertData.trainName,
+            previousStation: alertData.movedFrom || alertData.previousStation,
+            previousStationName: alertData.movedFromName || alertData.previousStationName,
+            nextStation: nextStation,
+            nextStationName: nextStationName,
+            distanceTraveled: alertData.distanceTraveled || 0,
+            lat: alertData.lat || 0,
+            lon: alertData.lon || 0,
+            timestamp: new Date().toISOString(), // Current time when event is published
+            raisedTime: alertData.raisedTime || alertData.timestamp, // Preserve original raised time
+            movedFrom: alertData.movedFrom,
+            movedFromName: alertData.movedFromName,
+            reason: 'alert_moved_from_previous_station'
+        };
+        
+        window.solaceTrainMonitor.publish(topic, JSON.stringify(payload))
+            .then(() => {
+                console.log(`📤 Published alert raised event to topic: ${topic}`);
+                console.log(`📊 Alert moved from ${alertData.movedFromName} to ${nextStationName}`);
+            })
+            .catch(error => {
+                console.error('❌ Failed to publish alert raised event:', error);
             });
     }
 
@@ -552,7 +677,7 @@ class EventManager {
             stationCode: stationCode,
             stationName: stationName,
             servedAt: new Date().toISOString(),
-            originalTimestamp: alertData.timestamp,
+            raisedTime: alertData.raisedTime || alertData.timestamp, // Preserve original raised time
             servedBy: 'train_departed'
         };
         
@@ -565,6 +690,204 @@ class EventManager {
             });
     }
 
+    // Publish alert unserved event when train reaches destination with unserved alerts
+    publishAlertUnservedEvent(alertData, stationCode, stationName) {
+        if (!window.solaceTrainMonitor) {
+            console.warn('🚩 Solace integration not available for publishing alert unserved event');
+            return;
+        }
+        
+        const topic = `tms/alert/unserved/${alertData.type}/${alertData.trainNumber}/${stationCode}`;
+        const payload = {
+            type: alertData.type,
+            trainNumber: alertData.trainNumber,
+            trainName: alertData.trainName,
+            previousStation: alertData.previousStation,
+            previousStationName: alertData.previousStationName,
+            nextStation: stationCode,
+            nextStationName: stationName,
+            unservedStation: stationCode,
+            unservedStationName: stationName,
+            distanceTraveled: alertData.distanceTraveled || 0,
+            lat: alertData.lat || 0,
+            lon: alertData.lon || 0,
+            timestamp: new Date().toISOString(),
+            raisedTime: alertData.raisedTime || alertData.timestamp, // Preserve original raised time
+            reason: 'train_reached_destination_with_unserved_alert'
+        };
+        
+        window.solaceTrainMonitor.publish(topic, JSON.stringify(payload))
+            .then(() => {
+                console.log(`📤 Published alert unserved event to topic: ${topic}`);
+                console.log(`📊 Alert unserved at destination: ${stationName}`);
+            })
+            .catch(error => {
+                console.error('❌ Failed to publish alert unserved event:', error);
+            });
+    }
+
+    // Method to clear unserved alerts when train reaches destination
+    clearUnservedAlertsAtDestination(trainNumber, destinationStation, destinationStationName) {
+        console.log(`🏁 CLEAR UNSERVED ALERTS CALLED for train ${trainNumber} at destination ${destinationStationName}`);
+        
+        if (!this.alertTracker) {
+            console.log(`❌ AlertTracker not available`);
+            return;
+        }
+        
+        console.log(`🏁 Clearing unserved alerts for train ${trainNumber} at destination ${destinationStationName}`);
+        console.log(`🔍 Looking for station key: ${destinationStation}_${destinationStationName}`);
+        console.log(`📋 Available station keys:`, Array.from(this.alertTracker.keys()));
+        console.log(`📋 AlertTracker size:`, this.alertTracker.size);
+        
+        // Debug: Show all alerts in the tracker
+        console.log(`🔍 All alerts in tracker:`);
+        for (const [key, data] of this.alertTracker.entries()) {
+            console.log(`  ${key}: ${data.alerts.received.length} alerts`);
+            if (data.alerts.received.length > 0) {
+                console.log(`    Alerts:`, data.alerts.received.map(alert => `${alert.type} for train ${alert.trainNumber}`));
+            }
+        }
+        
+        let foundStation = false;
+        let totalUnservedAlerts = 0;
+        
+        // First, check if there are any unserved alerts at other stations for this train
+        // that should be moved to the destination before clearing
+        let alertsToMoveToDestination = [];
+        for (const [key, data] of this.alertTracker.entries()) {
+            if (data.alerts.received.length > 0) {
+                // Check if any alerts are for this train
+                const trainAlerts = data.alerts.received.filter(alert => alert.trainNumber === trainNumber);
+                if (trainAlerts.length > 0) {
+                    console.log(`🔍 Found ${trainAlerts.length} unserved alerts for train ${trainNumber} at station ${key}`);
+                    console.log(`🔍 Alert details:`, trainAlerts.map(alert => ({ type: alert.type, id: alert.id, raisedTime: alert.raisedTime })));
+                    alertsToMoveToDestination.push(...trainAlerts);
+                }
+            }
+        }
+        
+        // If there are alerts to move to destination, move them first
+        if (alertsToMoveToDestination.length > 0) {
+            console.log(`🚩 Moving ${alertsToMoveToDestination.length} unserved alerts to destination ${destinationStationName} before clearing`);
+            
+            // Get or create destination station data
+            const destinationStationKey = `${destinationStation}_${destinationStationName}`;
+            if (!this.alertTracker.has(destinationStationKey)) {
+                this.alertTracker.set(destinationStationKey, {
+                    stationCode: destinationStation,
+                    stationName: destinationStationName,
+                    alerts: {
+                        received: [],
+                        served: [],
+                        missed: []
+                    },
+                    summary: {
+                        received: 0,
+                        served: 0,
+                        missed: 0
+                    }
+                });
+            }
+            
+            const destinationStationData = this.alertTracker.get(destinationStationKey);
+            
+            // Move alerts to destination
+            alertsToMoveToDestination.forEach(alert => {
+                // Check if alert already exists in destination to prevent duplicates
+                const existingAlert = destinationStationData.alerts.received.find(existing => 
+                    existing.id === alert.id
+                );
+                
+                if (!existingAlert) {
+                    // Update alert with destination information
+                    const movedAlert = {
+                        ...alert,
+                        nextStation: destinationStation,
+                        nextStationName: destinationStationName,
+                        timestamp: new Date().toISOString(),
+                        movedFrom: alert.nextStation,
+                        movedFromName: alert.nextStationName,
+                        raisedTime: alert.raisedTime || alert.timestamp
+                    };
+                    
+                    destinationStationData.alerts.received.push(movedAlert);
+                    destinationStationData.summary.received++;
+                    console.log(`✅ Moved alert ${movedAlert.type} for train ${movedAlert.trainNumber} to destination ${destinationStationName}`);
+                    console.log(`✅ Alert details after move:`, { type: movedAlert.type, id: movedAlert.id, raisedTime: movedAlert.raisedTime });
+                } else {
+                    console.log(`⏭️ Alert ${alert.type} for train ${alert.trainNumber} already exists in destination ${destinationStationName}`);
+                }
+            });
+            
+            // Remove alerts from their original stations
+            for (const [key, data] of this.alertTracker.entries()) {
+                if (key !== destinationStationKey) {
+                    const originalLength = data.alerts.received.length;
+                    data.alerts.received = data.alerts.received.filter(alert => alert.trainNumber !== trainNumber);
+                    const removedCount = originalLength - data.alerts.received.length;
+                    if (removedCount > 0) {
+                        data.summary.received -= removedCount;
+                        console.log(`🗑️ Removed ${removedCount} alerts from station ${key}`);
+                    }
+                }
+            }
+            
+            // Debug: Show the state after moving alerts
+            console.log(`🔍 Alert tracker state after moving alerts to destination:`);
+            for (const [key, data] of this.alertTracker.entries()) {
+                if (data.alerts.received.length > 0) {
+                    console.log(`  ${key}: ${data.alerts.received.length} alerts`);
+                    data.alerts.received.forEach(alert => {
+                        console.log(`    - ${alert.type} for train ${alert.trainNumber} (id: ${alert.id})`);
+                    });
+                }
+            }
+        }
+        
+        // Now find the station key that matches the destination station
+        for (const [key, data] of this.alertTracker.entries()) {
+            console.log(`🔍 Checking key: "${key}" against pattern: "${destinationStation}_"`);
+            if (key.startsWith(`${destinationStation}_`)) {
+                foundStation = true;
+                console.log(`✅ Found matching station key: ${key}`);
+                console.log(`📊 Station data:`, data);
+                
+                const unservedAlerts = [...data.alerts.received]; // Create a copy to avoid modification during iteration
+                totalUnservedAlerts = unservedAlerts.length;
+                
+                console.log(`📋 Found ${unservedAlerts.length} unserved alerts at destination ${destinationStationName}`);
+                console.log(`📋 Unserved alerts:`, unservedAlerts);
+                
+                if (unservedAlerts.length > 0) {
+                    // Publish unserved events for each alert
+                    unservedAlerts.forEach((alert, index) => {
+                        console.log(`📤 Publishing unserved event ${index + 1}/${unservedAlerts.length} for alert:`, { type: alert.type, trainNumber: alert.trainNumber, id: alert.id });
+                        this.publishAlertUnservedEvent(alert, destinationStation, destinationStationName);
+                    });
+                    
+                    // Clear the alerts from the tracker
+                    data.alerts.received = [];
+                    data.summary.received = 0;
+                    
+                    // Clear the flag on the map
+                    if (window.trainMonitorInstance) {
+                        console.log(`🚩 Clearing flag for destination station ${destinationStation}`);
+                        window.trainMonitorInstance.updateAlertFlag(destinationStation, 0);
+                    }
+                } else {
+                    console.log(`📋 No unserved alerts found at destination ${destinationStationName}`);
+                }
+                break;
+            }
+        }
+        
+        if (!foundStation) {
+            console.log(`❌ No station found with key starting with: ${destinationStation}_`);
+        }
+        
+        console.log(`🏁 CLEAR UNSERVED ALERTS COMPLETED - Found station: ${foundStation}, Unserved alerts: ${totalUnservedAlerts}`);
+    }
 
     // Method to mark alerts as served (called when train arrives at station)
     markAlertsAsServed(stationCode) {
@@ -597,8 +920,14 @@ class EventManager {
         const alertType = data.type || 'Unknown';
         const stationName = data.nextStationName || 'Unknown Station';
         
+        // Check if this is a re-raised alert (moved from previous station)
+        if (data.reason === 'alert_moved_from_previous_station' && data.movedFromName) {
+            return `🔄 Alert re-raised: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName} (moved from ${data.movedFromName})`;
+        }
+        
         return `🚨 Alert raised: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName}`;
     }
+
 
     /**
      * Generate train event brief description
@@ -668,6 +997,14 @@ class EventManager {
         return `✅ Alert Served: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName} (${servedBy})`;
     }
 
+    generateAlertUnservedEventBrief(data) {
+        const trainNumber = data.trainNumber || 'Unknown';
+        const alertType = data.type || 'Unknown';
+        const stationName = data.unservedStationName || 'Unknown Station';
+        
+        return `🚫 Alert Unserved: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName}`;
+    }
+
     /**
      * Generate train event details
      */
@@ -716,9 +1053,17 @@ class EventManager {
         if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
         if (data.previousStation) details.push({ label: 'Previous Station', value: `${data.previousStation} - ${data.previousStationName}` });
         if (data.nextStation) details.push({ label: 'Next Station', value: `${data.nextStation} - ${data.nextStationName}` });
+        
+        // Show additional info for re-raised alerts
+        if (data.reason === 'alert_moved_from_previous_station' && data.movedFromName) {
+            details.push({ label: 'Moved From', value: data.movedFromName });
+            details.push({ label: 'Reason', value: 'Alert moved from previous station' });
+        }
+        
         if (data.distanceTraveled) details.push({ label: 'Distance Traveled', value: `${data.distanceTraveled} km` });
         if (data.lat && data.lon) details.push({ label: 'Location', value: `${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}` });
-        if (data.timestamp) details.push({ label: 'Timestamp', value: new Date(data.timestamp).toLocaleString() });
+        if (data.raisedTime) details.push({ label: 'Original Alert Time', value: new Date(data.raisedTime).toLocaleString() });
+        if (data.timestamp) details.push({ label: 'Event Time', value: new Date(data.timestamp).toLocaleString() });
         
         return details;
     }
@@ -734,7 +1079,7 @@ class EventManager {
         if (data.reason) details.push({ label: 'Reason', value: data.reason.replace(/_/g, ' ') });
         if (data.distanceTraveled) details.push({ label: 'Distance Traveled', value: `${data.distanceTraveled} km` });
         if (data.lat && data.lon) details.push({ label: 'Location', value: `${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}` });
-        if (data.originalTimestamp) details.push({ label: 'Original Alert Time', value: new Date(data.originalTimestamp).toLocaleString() });
+        if (data.raisedTime) details.push({ label: 'Original Alert Time', value: new Date(data.raisedTime).toLocaleString() });
         if (data.timestamp) details.push({ label: 'Missed Time', value: new Date(data.timestamp).toLocaleString() });
         
         return details;
@@ -748,8 +1093,22 @@ class EventManager {
         if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
         if (data.stationCode) details.push({ label: 'Served At Station', value: `${data.stationCode} - ${data.stationName}` });
         if (data.servedBy) details.push({ label: 'Served By', value: data.servedBy.replace(/_/g, ' ') });
-        if (data.originalTimestamp) details.push({ label: 'Original Alert Time', value: new Date(data.originalTimestamp).toLocaleString() });
+        if (data.raisedTime) details.push({ label: 'Original Alert Time', value: new Date(data.raisedTime).toLocaleString() });
         if (data.servedAt) details.push({ label: 'Served Time', value: new Date(data.servedAt).toLocaleString() });
+        
+        return details;
+    }
+
+    generateAlertUnservedEventDetails(data) {
+        const details = [];
+        
+        if (data.type) details.push({ label: 'Alert Type', value: data.type.replace(/_/g, ' ') });
+        if (data.trainNumber) details.push({ label: 'Train Number', value: data.trainNumber });
+        if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
+        if (data.unservedStation) details.push({ label: 'Unserved At Station', value: `${data.unservedStation} - ${data.unservedStationName}` });
+        if (data.reason) details.push({ label: 'Reason', value: data.reason.replace(/_/g, ' ') });
+        if (data.raisedTime) details.push({ label: 'Original Alert Time', value: new Date(data.raisedTime).toLocaleString() });
+        if (data.timestamp) details.push({ label: 'Unserved Time', value: new Date(data.timestamp).toLocaleString() });
         
         return details;
     }
@@ -758,6 +1117,9 @@ class EventManager {
      * Add a new event to the list
      */
     addEvent(event) {
+        console.log('📝 addEvent called with event:', event.type, event.brief);
+        console.log('📝 Events count before adding:', this.events.length);
+        
         // Add to beginning of array (newest first)
         this.events.unshift(event);
         
@@ -766,8 +1128,13 @@ class EventManager {
             this.events = this.events.slice(0, this.maxEvents);
         }
         
+        console.log('📝 Events count after adding:', this.events.length);
+        console.log('📝 Calling renderEvents...');
+        
         this.renderEvents();
         this.autoScrollToTop();
+        
+        console.log('📝 addEvent completed');
     }
 
     /**
@@ -848,8 +1215,8 @@ class EventManager {
             ? this.events 
             : this.events.filter(event => {
                 if (this.currentFilter === 'alert') {
-                    // Include all alert-related events (raised, missed, served)
-                    return event.type === 'alert' || event.type === 'alert_missed' || event.type === 'alert_served';
+                    // Include all alert-related events (raised, missed, served, unserved)
+                    return event.type === 'alert' || event.type === 'alert_missed' || event.type === 'alert_served' || event.type === 'alert_unserved';
                 }
                 return event.type === this.currentFilter;
             });

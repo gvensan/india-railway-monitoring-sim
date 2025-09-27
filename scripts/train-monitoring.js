@@ -231,6 +231,8 @@ class TrainMonitor {
     initializeTrain() {
         // Create train marker at starting position with proper train icon
         const startStation = this.stations[0];
+        console.log('🔍 Creating train marker at:', startStation);
+        
         this.trainMarker = L.marker([startStation.lat, startStation.lng], {
             icon: L.divIcon({
                 className: 'train-marker',
@@ -239,6 +241,29 @@ class TrainMonitor {
                 iconAnchor: [12, 12]
             })
         }).addTo(this.map);
+        
+        console.log('🔍 Train marker created:', this.trainMarker);
+        
+        // Add simple mouseover tooltip
+        this.setupSimpleTooltip(this.trainMarker);
+        
+        // Add test click handler to manually show tooltip
+        this.trainMarker.on('click', () => {
+            console.log('🔍 Train marker clicked - testing tooltip manually');
+            if (this.trainMarker._tooltipElement) {
+                console.log('🔍 Showing tooltip manually');
+                this.updateTooltipContent(this.trainMarker, this.trainMarker._tooltipElement);
+                const markerPoint = this.map.latLngToContainerPoint(this.trainMarker.getLatLng());
+                this.trainMarker._tooltipElement.style.left = markerPoint.x + 'px';
+                this.trainMarker._tooltipElement.style.top = markerPoint.y + 'px';
+                this.trainMarker._tooltipElement.style.opacity = '1';
+                setTimeout(() => {
+                    this.trainMarker._tooltipElement.style.opacity = '0';
+                }, 3000);
+            } else {
+                console.log('❌ No tooltip element found on marker');
+            }
+        });
         
         this.trainMarker.bindPopup(`
             <div style="text-align: center; font-family: 'Segoe UI', sans-serif; min-width: 200px;">
@@ -976,6 +1001,7 @@ class TrainMonitor {
     // Alert flag management
     addAlertFlag(stationCode, alertCount) {
         console.log(`🚩 addAlertFlag called for ${stationCode} with ${alertCount} alerts`);
+        // console.log(`🚩 Current alert flags:`, Array.from(this.alertFlags.keys()));
         
         if (!this.map) {
             console.warn('🚩 Map not available for flag creation');
@@ -984,6 +1010,12 @@ class TrainMonitor {
 
         // Remove existing flag if any
         this.removeAlertFlag(stationCode);
+        
+        // Don't create flag if alert count is 0
+        if (alertCount === 0) {
+            console.log(`🚩 No flag created for ${stationCode} - alert count is 0`);
+            return;
+        }
 
         // Find station coordinates
         const station = this.stations.find(s => s.code === stationCode);
@@ -1016,14 +1048,18 @@ class TrainMonitor {
         // Get alert details from event manager
         const alertDetails = this.getAlertDetailsForStation(stationCode);
         
+        // Use actual alert count from details instead of parameter
+        const actualAlertCount = alertDetails ? alertDetails.length : 0;
+        // console.log(`🚩 Alert count mismatch - parameter: ${alertCount}, actual: ${actualAlertCount}`);
+        
         // Create tooltip content matching station tooltip format
         const tooltipContent = document.createElement('div');
         tooltipContent.className = 'alert-tooltip-content';
         
-        // Header with train icon
+        // Header with train icon - use actual count
         const header = document.createElement('div');
         header.className = 'alert-tooltip-header';
-        header.innerHTML = `🚨 ${alertCount} Alert${alertCount > 1 ? 's' : ''} at ${station.name}`;
+        header.innerHTML = `🚨 ${actualAlertCount} Alert${actualAlertCount > 1 ? 's' : ''} at ${station.name}`;
         tooltipContent.appendChild(header);
         
         // Alert details
@@ -1151,13 +1187,26 @@ class TrainMonitor {
 
     updateAlertFlag(stationCode, alertCount) {
         if (this.alertFlags.has(stationCode)) {
-            const flag = this.alertFlags.get(stationCode);
-            const tooltip = flag.querySelector('.alert-flag-tooltip');
-            if (tooltip) {
-                const station = this.stations.find(s => s.code === stationCode);
-                tooltip.textContent = `${alertCount} alert${alertCount > 1 ? 's' : ''} at ${station?.name || stationCode}`;
+            const existingFlag = this.alertFlags.get(stationCode);
+            const isServed = existingFlag.classList.contains('served');
+            
+            // If alert count is 0, just remove the flag
+            if (alertCount === 0) {
+                this.removeAlertFlag(stationCode);
+                console.log(`🚩 Removed alert flag for station ${stationCode} - no alerts remaining`);
+                return;
             }
-            console.log(`🚩 Updated alert flag for station ${stationCode} to ${alertCount} alerts`);
+            
+            // Remove existing flag and recreate with updated content
+            this.removeAlertFlag(stationCode);
+            this.addAlertFlag(stationCode, alertCount);
+            
+            // Restore served state if it was served
+            if (isServed) {
+                this.makeFlagBlink(stationCode);
+            }
+            
+            console.log(`🚩 Updated alert flag for station ${stationCode} to ${alertCount} alerts${isServed ? ' (restored served state)' : ''}`);
         } else {
             this.addAlertFlag(stationCode, alertCount);
         }
@@ -1319,15 +1368,27 @@ class TrainMonitor {
     // Get alert details for a specific station
     getAlertDetailsForStation(stationCode) {
         if (!window.eventManager || !window.eventManager.alertTracker) {
+            console.log(`🚩 getAlertDetailsForStation: No event manager or alert tracker for ${stationCode}`);
             return [];
         }
+        
+        // console.log(`🚩 getAlertDetailsForStation: Looking for station ${stationCode}`);
+        // console.log(`🚩 Available alert tracker keys:`, Array.from(window.eventManager.alertTracker.keys()));
         
         // Find the station key that matches the station code
         for (const [key, data] of window.eventManager.alertTracker.entries()) {
             if (key.startsWith(`${stationCode}_`)) {
+                // console.log(`🚩 Found station data for ${stationCode}:`, {
+                //     key: key,
+                //     received: data.alerts.received?.length || 0,
+                //     served: data.alerts.served?.length || 0,
+                //     missed: data.alerts.missed?.length || 0
+                // });
                 return data.alerts.received || [];
             }
         }
+        
+        console.log(`🚩 No station data found for ${stationCode}`);
         return [];
     }
 
@@ -1363,7 +1424,9 @@ class TrainMonitor {
         const flag = this.alertFlags.get(stationCode);
         if (flag) {
             flag.classList.add('served');
-            console.log(`🚩 Flag at station ${stationCode} is now blinking (marked as served)`);
+            // Hide the tooltip when flag starts blinking
+            this.hideAlertTooltip(stationCode);
+            console.log(`🚩 Flag at station ${stationCode} is now blinking (marked as served) and tooltip is hidden`);
         }
     }
     
@@ -1375,8 +1438,13 @@ class TrainMonitor {
             if (tooltip) {
                 tooltip.style.opacity = '0';
                 tooltip.style.pointerEvents = 'none';
-                console.log(`🚩 Tooltip hidden for station ${stationCode}`);
+                tooltip.style.display = 'none'; // Also hide with display none for extra safety
+                console.log(`🚩 Tooltip hidden for station ${stationCode} (opacity: 0, pointer-events: none, display: none)`);
+            } else {
+                console.log(`🚩 No tooltip found to hide for station ${stationCode}`);
             }
+        } else {
+            console.log(`🚩 No flag found for station ${stationCode} to hide tooltip`);
         }
     }
 
@@ -1531,6 +1599,7 @@ class TrainMonitor {
             }
             
             // Create alert payload
+            const raisedTime = new Date().toISOString();
             const alertPayload = {
                 type: alertType,
                 trainNumber: trainNumber.toString(),
@@ -1542,7 +1611,8 @@ class TrainMonitor {
                 distanceTraveled: trainData.distanceTraveled,
                 lat: trainData.lat,
                 lon: trainData.lon,
-                timestamp: new Date().toISOString()
+                timestamp: raisedTime,
+                raisedTime: raisedTime // Add raisedTime field to preserve original raised time
             };
             
             // Publish alert raised event directly
@@ -1587,6 +1657,56 @@ class TrainMonitor {
                 lat: this.currentPosition?.lat || 0,
                 lon: this.currentPosition?.lng || 0
             };
+        }
+        
+        // Check if this train is in the allTrains Map (All Trains mode)
+        if (this.isAllTrainsMode && this.allTrains.has(trainNumber)) {
+            const trainData = this.allTrains.get(trainNumber);
+            const trainState = this.allTrainStates.get(trainNumber);
+            
+            console.log(`🔍 Debug - All Trains mode - Train ${trainNumber} data:`, {
+                trainData,
+                trainState: trainState ? {
+                    currentStationIndex: trainState.currentStationIndex,
+                    currentPosition: trainState.currentPosition,
+                    distanceTraveled: trainState.distanceTraveled,
+                    isAtStation: trainState.isAtStation
+                } : 'No state'
+            });
+            
+            if (trainState && trainData.route) {
+                // Use the actual train state for accurate position data
+                const route = trainData.route;
+                const currentStationIndex = trainState.currentStationIndex || 0;
+                const previousStationIndex = Math.max(0, currentStationIndex);
+                const nextStationIndex = Math.min(route.length - 1, currentStationIndex + 1);
+                
+                return {
+                    trainName: trainData.trainName || `Train ${trainNumber}`,
+                    previousStation: route[previousStationIndex]?.code || '',
+                    previousStationName: route[previousStationIndex]?.name || 'UNKNOWN',
+                    nextStation: route[nextStationIndex]?.code || '',
+                    nextStationName: route[nextStationIndex]?.name || 'UNKNOWN',
+                    distanceTraveled: trainState.distanceTraveled || 0,
+                    lat: trainState.currentPosition?.lat || 0,
+                    lon: trainState.currentPosition?.lng || 0
+                };
+            } else if (trainData.route && trainData.route.length > 0) {
+                // Fallback to route data if no state available
+                const currentStation = trainData.route[0];
+                const nextStation = trainData.route.length > 1 ? trainData.route[1] : trainData.route[0];
+                
+                return {
+                    trainName: trainData.trainName || `Train ${trainNumber}`,
+                    previousStation: currentStation?.code || '',
+                    previousStationName: currentStation?.name || 'UNKNOWN',
+                    nextStation: nextStation?.code || '',
+                    nextStationName: nextStation?.name || 'UNKNOWN',
+                    distanceTraveled: 0,
+                    lat: currentStation?.lat || 0,
+                    lon: currentStation?.lng || 0
+                };
+            }
         }
         
         // For other trains, return basic data (could be enhanced with stored data)
@@ -1726,24 +1846,43 @@ class TrainMonitor {
         }
 
         async publishTrainArrivedDestinationEvent() {
+            console.log(`🏁 SINGLE TRAIN DESTINATION ARRIVAL EVENT TRIGGERED for train ${this.currentTrainNumber}`);
+            
             if (!window.solaceTrainMonitor || !window.solaceTrainMonitor.isConnected) {
+                console.log(`❌ Solace not connected, skipping destination arrival event`);
                 return;
             }
 
             try {
                 const previousStation = this.stations[this.stations.length - 2]; // Second to last station
+                const destinationStation = this.stations[this.stations.length - 1];
                 const trainData = {
                     trainNumber: this.currentTrainNumber || '',
                     trainName: this.currentTrainName || '',
                     origin: this.stations[0]?.code || '',
                     originName: this.stations[0]?.name || '',
-                    destination: this.stations[this.stations.length - 1]?.code || '',
-                    destinationName: this.stations[this.stations.length - 1]?.name || '',
+                    destination: destinationStation?.code || '',
+                    destinationName: destinationStation?.name || '',
                     previousStation: previousStation?.code || '',
                     distanceTraveled: this.calculateDistanceTraveled()
                 };
 
                 await window.solaceTrainMonitor.publishTrainArrivedDestination(trainData);
+                
+                // Clear any unserved alerts at the destination station
+                console.log(`🏁 Train ${this.currentTrainNumber} reached destination ${destinationStation.name}, checking for unserved alerts...`);
+                console.log(`🔍 EventManager available:`, !!window.eventManager);
+                console.log(`🔍 Destination station:`, destinationStation);
+                
+                if (window.eventManager && destinationStation) {
+                    window.eventManager.clearUnservedAlertsAtDestination(
+                        this.currentTrainNumber, 
+                        destinationStation.code, 
+                        destinationStation.name
+                    );
+                } else {
+                    console.log(`❌ Cannot clear unserved alerts - EventManager: ${!!window.eventManager}, DestinationStation: ${!!destinationStation}`);
+                }
             } catch (error) {
                 console.error('Error publishing train arrived destination event:', error);
             }
@@ -1844,24 +1983,43 @@ class TrainMonitor {
         }
 
         async publishAllTrainArrivedDestinationEvent(trainNumber, trainData, trainState) {
+            console.log(`🏁 DESTINATION ARRIVAL EVENT TRIGGERED for train ${trainNumber}`);
+            
             if (!window.solaceTrainMonitor || !window.solaceTrainMonitor.isConnected) {
+                console.log(`❌ Solace not connected, skipping destination arrival event`);
                 return;
             }
 
             try {
                 const previousStation = trainData.route[trainData.route.length - 2]; // Second to last station
+                const destinationStation = trainData.route[trainData.route.length - 1];
                 const eventData = {
                     trainNumber: trainNumber,
                     trainName: trainData.trainName,
                     origin: trainData.route[0]?.code || '',
                     originName: trainData.route[0]?.name || '',
-                    destination: trainData.route[trainData.route.length - 1]?.code || '',
-                    destinationName: trainData.route[trainData.route.length - 1]?.name || '',
+                    destination: destinationStation?.code || '',
+                    destinationName: destinationStation?.name || '',
                     previousStation: previousStation?.code || '',
                     distanceTraveled: this.calculateAllTrainDistanceTraveled(trainData, trainState)
                 };
 
                 await window.solaceTrainMonitor.publishTrainArrivedDestination(eventData);
+                
+                // Clear any unserved alerts at the destination station
+                console.log(`🏁 Train ${trainNumber} reached destination ${destinationStation.name}, checking for unserved alerts...`);
+                console.log(`🔍 EventManager available:`, !!window.eventManager);
+                console.log(`🔍 Destination station:`, destinationStation);
+                
+                if (window.eventManager && destinationStation) {
+                    window.eventManager.clearUnservedAlertsAtDestination(
+                        trainNumber, 
+                        destinationStation.code, 
+                        destinationStation.name
+                    );
+                } else {
+                    console.log(`❌ Cannot clear unserved alerts - EventManager: ${!!window.eventManager}, DestinationStation: ${!!destinationStation}`);
+                }
             } catch (error) {
                 console.error('Error publishing all train arrived destination event:', error);
             }
@@ -2232,14 +2390,20 @@ class TrainMonitor {
         
         // Add new station markers for the train route
         trainData.route.forEach((station, index) => {
-            // Make first and last stations larger, intermediate stations smaller
-            const isFirstOrLast = index === 0 || index === this.stations.length - 1;
+            // Make first and last stations same size as regular but blue, intermediate stations smaller and green
+            const isFirstOrLast = index === 0 || index === trainData.route.length - 1;
             const iconSize = isFirstOrLast ? [20, 20] : [12, 12];
             const iconAnchor = isFirstOrLast ? [10, 10] : [6, 6];
+            const className = isFirstOrLast ? 'station-marker origin-destination' : 'station-marker';
+            
+            // Debug logging
+            if (isFirstOrLast) {
+                console.log(`🔵 Origin/Destination marker: ${station.name} (${station.code}) - Class: ${className}, Size: ${iconSize[0]}x${iconSize[1]}`);
+            }
 
             const marker = L.marker([station.lat, station.lng], {
                 icon: L.divIcon({
-                    className: 'station-marker',
+                    className: className,
                     html: '',
                     iconSize: iconSize,
                     iconAnchor: iconAnchor
@@ -2304,9 +2468,11 @@ class TrainMonitor {
         
         // Recreate train marker with proper train icon at starting station
         if (this.trainMarker) {
+            console.log('🔍 Removing existing train marker');
             this.map.removeLayer(this.trainMarker);
         }
         
+        console.log('🔍 Creating new train marker at:', this.stations[0]);
         this.trainMarker = L.marker([this.stations[0].lat, this.stations[0].lng], {
             icon: L.divIcon({
                 className: 'train-marker',
@@ -2315,6 +2481,29 @@ class TrainMonitor {
                 iconAnchor: [12, 12]
             })
         }).addTo(this.map);
+        
+        console.log('🔍 New train marker created:', this.trainMarker);
+        
+        // Add simple mouseover tooltip
+        this.setupSimpleTooltip(this.trainMarker);
+        
+        // Add test click handler to manually show tooltip
+        this.trainMarker.on('click', () => {
+            console.log('🔍 Train marker clicked - testing tooltip manually');
+            if (this.trainMarker._tooltipElement) {
+                console.log('🔍 Showing tooltip manually');
+                this.updateTooltipContent(this.trainMarker, this.trainMarker._tooltipElement);
+                const markerPoint = this.map.latLngToContainerPoint(this.trainMarker.getLatLng());
+                this.trainMarker._tooltipElement.style.left = markerPoint.x + 'px';
+                this.trainMarker._tooltipElement.style.top = markerPoint.y + 'px';
+                this.trainMarker._tooltipElement.style.opacity = '1';
+                setTimeout(() => {
+                    this.trainMarker._tooltipElement.style.opacity = '0';
+                }, 3000);
+            } else {
+                console.log('❌ No tooltip element found on marker');
+            }
+        });
         
         // Generate waypoints for the loaded train route to follow exact track
         this.waypoints = this.generateWaypoints();
@@ -2426,15 +2615,20 @@ class TrainMonitor {
             if (marker) {
                 marker.setLatLng([trainState.currentPosition.lat, trainState.currentPosition.lng]);
                 
-                // Update marker color based on train state
-                const isAtDestination = trainState.currentStationIndex >= trainData.route.length - 1;
+                // Update marker icon (keep using the same train icon as single train mode)
                 const newIcon = L.divIcon({
                     className: 'train-marker',
-                    html: this.createAllTrainIcon(trainNumber, isAtDestination),
-                    iconSize: [20, 20],
-                    iconAnchor: [10, 10]
+                    html: this.createTrainIcon(), // Use the same train icon as single train mode
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
                 });
                 marker.setIcon(newIcon);
+                
+                // Update popup with current information (tooltip is static to avoid interfering with auto-hide)
+                const trainData = this.allTrains.get(trainNumber);
+                if (trainData) {
+                    marker.setPopupContent(this.createTrainTooltip(trainData));
+                }
             }
             
             // Check if train is at destination
@@ -2595,6 +2789,8 @@ class TrainMonitor {
                     
                     // If we've reached the final station, stop the train
                     if (trainState.currentStationIndex >= trainData.route.length - 1) {
+                        console.log(`🏁 ALL TRAINS - Train ${trainNumber} REACHED FINAL DESTINATION! Station index: ${trainState.currentStationIndex}, Total stations: ${trainData.route.length}`);
+                        console.log(`🏁 Final station: ${nextStation.name} (${nextStation.code})`);
                         // Publish train arrived at destination event for multi-train
                         await this.publishAllTrainArrivedDestinationEvent(trainNumber, trainData, trainState);
                         console.log(`🏁 Train ${trainNumber} reached final destination!`);
@@ -2723,6 +2919,8 @@ class TrainMonitor {
                     
                     // If we've reached the final station, stop the simulation
                     if (this.currentStationIndex >= this.stations.length - 1) {
+                        console.log(`🏁 TRAIN REACHED FINAL DESTINATION! Station index: ${this.currentStationIndex}, Total stations: ${this.stations.length}`);
+                        console.log(`🏁 Final station: ${nextStation.name} (${nextStation.code})`);
                         await this.publishTrainArrivedDestinationEvent();
                         this.stop();
                         this.updateStatus('Arrived at destination!');
@@ -2755,6 +2953,8 @@ class TrainMonitor {
         // Update train marker position - ensure currentPosition is valid
         if (this.trainMarker && this.currentPosition && this.currentPosition.lat !== undefined && this.currentPosition.lng !== undefined) {
             this.trainMarker.setLatLng([this.currentPosition.lat, this.currentPosition.lng]);
+            
+            // Tooltip content is updated on mouseover for better performance
         }
         
         // Update status display
@@ -3110,23 +3310,23 @@ class TrainMonitor {
     createAllTrainMarkers() {
         this.allTrains.forEach((trainData, trainNumber) => {
             if (trainData.route.length > 0) {
-                // Create train marker at starting position
+                // Create train marker at starting position with proper train icon
                 const startStation = trainData.route[0];
                 const marker = L.marker([startStation.lat, startStation.lng], {
                     icon: L.divIcon({
                         className: 'train-marker',
-                        html: this.createAllTrainIcon(trainNumber, false), // false = not at destination initially
-                        iconSize: [20, 20],
-                        iconAnchor: [10, 10]
+                        html: this.createTrainIcon(), // Use the same train icon as single train mode
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
                     })
                 }).addTo(this.map);
                 
-                // Add tooltip with train information
-                marker.bindTooltip(this.createTrainTooltip(trainData), {
-                    permanent: false,
-                    direction: 'top',
-                    offset: [0, -10]
-                });
+                    // Add simple mouseover tooltip
+                    marker._trainNumber = trainNumber; // Store train number for tooltip
+                    this.setupSimpleTooltip(marker);
+                
+                // Add popup with train information (click to show)
+                marker.bindPopup(this.createTrainTooltip(trainData));
                 
                 this.allTrainMarkers.set(trainNumber, marker);
                 
@@ -3149,13 +3349,19 @@ class TrainMonitor {
         // Create station markers for this train's route
         trainData.route.forEach((station, index) => {
             const isFirstOrLast = index === 0 || index === trainData.route.length - 1;
-            const iconSize = isFirstOrLast ? [16, 16] : [8, 8];
-            const iconAnchor = isFirstOrLast ? [8, 8] : [4, 4];
+            const iconSize = isFirstOrLast ? [20, 20] : [8, 8];
+            const iconAnchor = isFirstOrLast ? [10, 10] : [4, 4];
+            const className = isFirstOrLast ? 'station-marker origin-destination' : 'station-marker';
+            
+            // Debug logging for All Trains mode
+            if (isFirstOrLast) {
+                console.log(`🔵 All Trains - Origin/Destination marker: ${station.name} (${station.code}) - Class: ${className}, Size: ${iconSize[0]}x${iconSize[1]}`);
+            }
             
             // Create station marker
             const stationMarker = L.marker([station.lat, station.lng], {
                 icon: L.divIcon({
-                    className: 'station-marker',
+                    className: className,
                     html: '',
                     iconSize: iconSize,
                     iconAnchor: iconAnchor
@@ -3203,41 +3409,195 @@ class TrainMonitor {
         return colors[colorIndex];
     }
     
-    createAllTrainIcon(trainNumber, isAtDestination = false) {
-        // Create a colored circle with train number for all trains mode
-        // Blue border for moving trains, Red border for trains at destination
-        const borderColor = isAtDestination ? '#e74c3c' : '#3498db'; // Red for destination, Blue for moving
-        const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
-        const colorIndex = parseInt(trainNumber) % colors.length;
-        const backgroundColor = colors[colorIndex];
+    
+    createSingleTrainTooltip() {
+        const status = this.isRunning ? (this.isPaused ? 'Paused' : 'Running') : 'Stopped';
+        const speed = this.isRunning ? `${Math.round(this.currentSpeed || 0)} km/h` : '0 km/h';
+        const currentStation = this.stations[this.currentStationIndex]?.name || 'Unknown';
+        const progress = this.stations.length > 0 ? `${this.currentStationIndex + 1}/${this.stations.length}` : '0/0';
         
-        return `
-            <div style="
-                width: 20px; 
-                height: 20px; 
-                background: ${backgroundColor}; 
-                border: 3px solid ${borderColor}; 
-                border-radius: 50%; 
-                display: flex; 
-                align-items: center; 
-                justify-content: center; 
-                font-size: 8px; 
-                font-weight: bold; 
-                color: white;
-                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            ">${trainNumber}</div>
-        `;
+        return `🚂 ${this.currentTrainName || 'Train'} - ${status} (${speed}) - Station ${progress}: ${currentStation}`;
     }
     
+    setupSimpleTooltip(marker) {
+        console.log('🔍 setupSimpleTooltip called for marker:', marker);
+        if (!marker) {
+            console.error('❌ setupSimpleTooltip: marker is null or undefined');
+            return;
+        }
+        
+        // Clean up any existing tooltip
+        if (marker.getTooltip()) {
+            console.log('🔍 Unbinding existing tooltip');
+            marker.unbindTooltip();
+        }
+        
+        // Remove any existing event listeners
+        marker.off('mouseover.tooltip');
+        marker.off('mouseout.tooltip');
+        
+        // Create tooltip element
+        const tooltipElement = document.createElement('div');
+        tooltipElement.className = 'train-tooltip-content';
+        tooltipElement.style.cssText = `
+            position: absolute;
+            background: white;
+            color: #2c3e50;
+            padding: 0;
+            border-radius: 8px;
+            font-size: 12px;
+            font-family: 'Segoe UI', sans-serif;
+            white-space: nowrap;
+            z-index: 10001;
+            pointer-events: auto;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            transform: translate(-50%, -100%);
+            margin-top: -8px;
+            min-width: 200px;
+            max-width: 280px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            border: 1px solid #dee2e6;
+            text-align: center;
+        `;
+        
+        // Add arrow
+        const arrow = document.createElement('div');
+        arrow.style.cssText = `
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 5px solid transparent;
+            border-top-color: white;
+        `;
+        tooltipElement.appendChild(arrow);
+        
+        // Add to map container
+        const mapContainer = this.map.getContainer();
+        mapContainer.appendChild(tooltipElement);
+        
+        // Store reference on marker
+        marker._tooltipElement = tooltipElement;
+        
+        // Show tooltip on mouseover
+        marker.on('mouseover.tooltip', () => {
+            console.log('🔍 Tooltip mouseover event triggered');
+            this.updateTooltipContent(marker, tooltipElement);
+            
+            // Position tooltip
+            const markerPoint = this.map.latLngToContainerPoint(marker.getLatLng());
+            tooltipElement.style.left = markerPoint.x + 'px';
+            tooltipElement.style.top = markerPoint.y + 'px';
+            tooltipElement.style.opacity = '1';
+            console.log('🔍 Tooltip positioned and shown at:', markerPoint);
+        });
+        
+        // Hide tooltip on mouseout
+        marker.on('mouseout.tooltip', () => {
+            console.log('🔍 Tooltip mouseout event triggered');
+            tooltipElement.style.opacity = '0';
+        });
+        
+        console.log('🔍 Simple tooltip setup completed for marker');
+    }
+    
+    // Update tooltip content with current train information
+    updateTooltipContent(marker, tooltipElement) {
+        console.log('🔍 updateTooltipContent called for marker:', marker);
+        if (!marker || !tooltipElement) {
+            console.error('❌ updateTooltipContent: marker or tooltipElement is null');
+            return;
+        }
+        
+        // Get train data based on marker type
+        let trainData;
+        if (marker === this.trainMarker) {
+            // Single train mode
+            const currentStation = this.stations[this.currentStationIndex]?.name || 'Unknown';
+            const nextStation = this.stations[this.currentStationIndex + 1]?.name || 'Unknown';
+            const sourceStation = this.stations[0]?.name || 'Unknown';
+            const destinationStation = this.stations[this.stations.length - 1]?.name || 'Unknown';
+            
+            trainData = {
+                trainNumber: this.currentTrainNumber,
+                trainName: this.currentTrainName,
+                currentStation: currentStation,
+                nextStation: nextStation,
+                source: sourceStation,
+                destination: destinationStation,
+                speed: this.currentSpeed,
+                status: this.isRunning ? (this.isPaused ? 'Paused' : 'Running') : 'Stopped',
+                progress: this.stations.length > 0 ? `${this.currentStationIndex + 1}/${this.stations.length}` : '0/0'
+            };
+        } else {
+            // All trains mode - get data from marker
+            const trainNumber = marker._trainNumber;
+            if (trainNumber && this.allTrains.has(trainNumber)) {
+                const train = this.allTrains.get(trainNumber);
+                const trainState = this.allTrainStates.get(trainNumber);
+                const currentStationIndex = trainState?.currentStationIndex || 0;
+                const route = train.route || [];
+                
+                trainData = {
+                    trainNumber: trainNumber,
+                    trainName: train.trainName,
+                    currentStation: route[currentStationIndex]?.name || 'Unknown',
+                    nextStation: route[currentStationIndex + 1]?.name || 'Unknown',
+                    source: route[0]?.name || 'Unknown',
+                    destination: route[route.length - 1]?.name || 'Unknown',
+                    speed: trainState?.currentSpeed || 0,
+                    status: trainState?.isAtStation ? 'Stopped' : 'Running',
+                    progress: route.length > 0 ? `${currentStationIndex + 1}/${route.length}` : '0/0'
+                };
+            }
+        }
+        
+        if (trainData) {
+            console.log('🔍 Train data found:', trainData);
+            // Create tooltip content using the same format as createTrainTooltip
+            const content = `
+                <div style="text-align: center; font-family: 'Segoe UI', sans-serif; min-width: 200px;">
+                    <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚂 Train ${trainData.trainNumber}</h4>
+                    <div style="background: #f8f9fa; border-radius: 6px; padding: 8px; margin: 6px 0;">
+                        <div style="margin: 4px 0;"><strong>Name:</strong> ${trainData.trainName}</div>
+                        ${trainData.source && trainData.destination ? `<div style="margin: 4px 0;"><strong>Route:</strong> ${trainData.source} → ${trainData.destination}</div>` : ''}
+                        <div style="margin: 4px 0;"><strong>Current Station:</strong> ${trainData.currentStation}</div>
+                        <div style="margin: 4px 0;"><strong>Progress:</strong> ${trainData.progress}</div>
+                        <div style="margin: 4px 0;"><strong>Speed:</strong> ${trainData.speed} km/h</div>
+                        <div style="margin: 4px 0;"><strong>Status:</strong> <span style="color: ${trainData.status === 'Running' ? '#28a745' : '#6c757d'};">${trainData.status}</span></div>
+                        <div style="margin: 4px 0;"><strong>Next:</strong> ${trainData.nextStation}</div>
+                    </div>
+                </div>
+            `;
+            tooltipElement.innerHTML = content;
+        } else {
+            console.log('❌ No train data found for marker');
+        }
+    }
+    
+    
     createTrainTooltip(trainData) {
+        // Get current train state for "All Trains" mode
+        const trainState = this.allTrainStates.get(trainData.trainNumber);
+        const isRunning = this.isRunning && !this.isPaused;
+        const currentStationIndex = trainState?.currentStationIndex || 0;
+        const currentStation = trainData.route[currentStationIndex]?.name || 'Unknown';
+        const speed = trainState?.currentSpeed ? `${Math.round(trainState.currentSpeed)} km/h` : '0 km/h';
+        const status = isRunning ? 'Running' : 'Stopped';
+        const progress = `${currentStationIndex + 1}/${trainData.route.length}`;
+        
         return `
             <div style="text-align: center; font-family: 'Segoe UI', sans-serif; min-width: 200px;">
                 <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚂 Train ${trainData.trainNumber}</h4>
                 <div style="background: #f8f9fa; border-radius: 6px; padding: 8px; margin: 6px 0;">
                     <div style="margin: 4px 0;"><strong>Name:</strong> ${trainData.trainName}</div>
                     <div style="margin: 4px 0;"><strong>Route:</strong> ${trainData.source} → ${trainData.destination}</div>
-                    <div style="margin: 4px 0;"><strong>Stations:</strong> ${trainData.route.length}</div>
-                    <div style="margin: 4px 0;"><strong>Status:</strong> <span style="color: #28a745;">Ready</span></div>
+                    <div style="margin: 4px 0;"><strong>Current Station:</strong> ${currentStation}</div>
+                    <div style="margin: 4px 0;"><strong>Progress:</strong> ${progress}</div>
+                    <div style="margin: 4px 0;"><strong>Speed:</strong> ${speed}</div>
+                    <div style="margin: 4px 0;"><strong>Status:</strong> <span style="color: ${isRunning ? '#28a745' : '#6c757d'};">${status}</span></div>
                 </div>
             </div>
         `;
@@ -3313,6 +3673,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     window.trainMonitorInstance = new TrainMonitor();
     window.trainMonitorInstance.init();
+    
 });
 
 // Station coordinates are now loaded from CSV file only

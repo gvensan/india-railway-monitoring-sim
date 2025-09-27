@@ -201,6 +201,12 @@
     <!-- Broker Configuration -->
     <script src="scripts/broker-config.js"></script>
     
+    <!-- Broker Configuration Dialog -->
+    <script src="scripts/broker-config-dialog.js"></script>
+    
+    <!-- In-Memory Broker -->
+    <script src="scripts/in-memory-broker.js"></script>
+    
     <!-- Solace Integration Script -->
     <script src="scripts/solace-integration.js"></script>
     
@@ -209,5 +215,62 @@
     
     <!-- Train Monitoring JavaScript -->
     <script src="scripts/train-monitoring.js"></script>
+    
+    <!-- Test Dual Broker Implementation (remove in production) -->
+    <script src="scripts/test-dual-broker.js"></script>
+    
+    <!-- Broker Configuration Dialog -->
+    <div id="broker-config-dialog" class="broker-dialog-overlay" style="display: none;">
+        <div class="broker-dialog">
+            <div class="broker-dialog-header">
+                <h3>🔧 Broker Configuration</h3>
+                <button class="broker-dialog-close" onclick="closeBrokerConfigDialog()">&times;</button>
+            </div>
+            <div class="broker-dialog-content">
+                <form id="broker-config-form">
+                    <div class="broker-type-selection">
+                        <label class="broker-type-label">
+                            <input type="radio" name="brokerType" value="inmemory" checked>
+                            <span class="broker-type-option">
+                                <strong>🧠 In-Memory Broker</strong>
+                                <small>Local simulation without external broker</small>
+                            </span>
+                        </label>
+                        <label class="broker-type-label">
+                            <input type="radio" name="brokerType" value="solace">
+                            <span class="broker-type-option">
+                                <strong>☁️ Solace PubSub+ Broker</strong>
+                                <small>Connect to external Solace broker</small>
+                            </span>
+                        </label>
+                    </div>
+                    
+                    <div id="solace-config-fields" class="solace-config-fields" style="display: none;">
+                        <div class="form-group">
+                            <label for="broker-url">Broker URL:</label>
+                            <input type="text" id="broker-url" name="url" placeholder="ws://localhost:8008" autocomplete="url" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="broker-vpn">VPN Name:</label>
+                            <input type="text" id="broker-vpn" name="vpnName" placeholder="default" autocomplete="organization" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="broker-username">Username:</label>
+                            <input type="text" id="broker-username" name="userName" placeholder="default" autocomplete="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="broker-password">Password:</label>
+                            <input type="password" id="broker-password" name="password" placeholder="default" autocomplete="current-password" required>
+                        </div>
+                    </div>
+                    
+                    <div class="broker-dialog-actions">
+                        <button type="button" class="btn btn-secondary" onclick="closeBrokerConfigDialog()">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save & Reset</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
