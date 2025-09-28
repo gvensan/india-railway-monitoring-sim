@@ -69,8 +69,8 @@ class TrainMonitor {
         this.initializeMap();
         this.setupEventListeners();
         
-        // Initialize sidebar as collapsed by default
-        this.initializeSidebar();
+        // Initialize right sidebar as collapsed by default
+        this.initializeRightSidebar();
         
         // Initialize Solace connection (optional)
         this.initializeSolace();
@@ -313,7 +313,11 @@ class TrainMonitor {
         if (toggleLayersBtn) toggleLayersBtn.addEventListener('click', () => this.toggleLayers());
         if (showTrainBtn) showTrainBtn.addEventListener('click', () => this.showTrain());
         if (centerMapBtn) centerMapBtn.addEventListener('click', () => this.centerMap());
-        if (resetBtn) resetBtn.addEventListener('click', () => this.resetAll());
+        if (resetBtn) resetBtn.addEventListener('click', () => {
+            this.resetAll();
+            // Call showTrain after reset to center the map
+            this.showTrain();
+        });
         
         // Auto-clean toggle
         const autoCleanToggle = document.getElementById('autoCleanToggle');
@@ -323,17 +327,61 @@ class TrainMonitor {
             });
         }
         
-        // Sidebar toggle
-        const toggleSidebarBtn = document.getElementById('toggleSidebarBtn');
-        const floatingToggleBtn = document.getElementById('floatingToggleBtn');
-        if (toggleSidebarBtn) toggleSidebarBtn.addEventListener('click', () => this.toggleSidebar());
-        if (floatingToggleBtn) floatingToggleBtn.addEventListener('click', () => this.toggleSidebar());
+        // Right sidebar toggle
+        const toggleRightSidebarBtn = document.getElementById('toggleRightSidebarBtn');
+        const floatingRightToggleBtn = document.getElementById('floatingRightToggleBtn');
+        
+        console.log('🚂 Setting up right sidebar event listeners');
+        console.log('🚂 toggleRightSidebarBtn element:', toggleRightSidebarBtn);
+        console.log('🚂 floatingRightToggleBtn element:', floatingRightToggleBtn);
+        
+        if (toggleRightSidebarBtn) {
+            toggleRightSidebarBtn.addEventListener('click', () => {
+                console.log('🚂 Toggle right sidebar button clicked!');
+                this.toggleRightSidebar();
+            });
+            console.log('🚂 Toggle right sidebar button event listener added');
+        } else {
+            console.error('❌ toggleRightSidebarBtn not found');
+        }
+        
+        if (floatingRightToggleBtn) {
+            floatingRightToggleBtn.addEventListener('click', () => {
+                console.log('🚂 Floating right toggle button clicked!');
+                this.toggleRightSidebar();
+            });
+            console.log('🚂 Floating right toggle button event listener added');
+        } else {
+            console.error('❌ floatingRightToggleBtn not found');
+        }
         
         // Events sidebar toggle
         const eventsFloatingBtn = document.getElementById('eventsFloatingBtn');
-        const closeRightSidebarBtn = document.getElementById('closeRightSidebarBtn');
-        if (eventsFloatingBtn) eventsFloatingBtn.addEventListener('click', () => this.toggleRightSidebar());
-        if (closeRightSidebarBtn) closeRightSidebarBtn.addEventListener('click', () => this.closeRightSidebar());
+        const closeLeftSidebarBtn = document.getElementById('closeLeftSidebarBtn');
+        
+        console.log('📋 Setting up left sidebar event listeners');
+        console.log('📋 eventsFloatingBtn element:', eventsFloatingBtn);
+        console.log('📋 closeLeftSidebarBtn element:', closeLeftSidebarBtn);
+        
+        if (eventsFloatingBtn) {
+            eventsFloatingBtn.addEventListener('click', () => {
+                console.log('📋 Events floating button clicked!');
+                this.toggleLeftSidebar();
+            });
+            console.log('📋 Events floating button event listener added');
+        } else {
+            console.error('❌ eventsFloatingBtn not found');
+        }
+        
+        if (closeLeftSidebarBtn) {
+            closeLeftSidebarBtn.addEventListener('click', () => {
+                console.log('📋 Close left sidebar button clicked!');
+                this.closeLeftSidebar();
+            });
+            console.log('📋 Close left sidebar button event listener added');
+        } else {
+            console.error('❌ closeLeftSidebarBtn not found');
+        }
         
         // Alert panel toggle
         const alertFloatingBtn = document.getElementById('alertFloatingBtn');
@@ -344,11 +392,17 @@ class TrainMonitor {
         // Train selection dropdown
         const selectTrainBtn = document.getElementById('selectTrainBtn');
         const trainDropdown = document.getElementById('trainDropdown');
-        if (selectTrainBtn) selectTrainBtn.addEventListener('click', () => this.selectTrainFromDropdown());
+        if (selectTrainBtn) selectTrainBtn.addEventListener('click', async () => {
+            await this.selectTrainFromDropdown();
+            // Call showTrain after train is loaded
+            this.showTrain();
+        });
         if (trainDropdown) {
-            trainDropdown.addEventListener('change', (e) => {
+            trainDropdown.addEventListener('change', async (e) => {
                 if (e.target.value) {
-                    this.selectTrainFromDropdown();
+                    await this.selectTrainFromDropdown();
+                    // Call showTrain after train is loaded
+                    this.showTrain();
                 }
             });
         }
@@ -561,6 +615,68 @@ class TrainMonitor {
         // Update progress indicator
         const progressText = `${this.currentStationIndex + 1}/${this.stations.length} stations`;
         document.getElementById('station-progress').textContent = progressText;
+        
+        // Update visual progress bar
+        this.updateProgressBar();
+    }
+    
+    /**
+     * Update the visual progress bar based on train's journey progress
+     */
+    updateProgressBar() {
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        
+        if (!progressFill || !progressText) {
+            return;
+        }
+        
+        // Calculate overall journey progress (0 to 100%)
+        let overallProgress = 0;
+        
+        if (this.stations.length > 0) {
+            // Base progress from completed stations
+            const completedStations = this.currentStationIndex;
+            const totalStations = this.stations.length - 1; // Exclude final station from total
+            
+            if (totalStations > 0) {
+                // Calculate progress within current segment
+                let segmentProgress = 0;
+                if (this.currentStationIndex < this.stations.length - 1) {
+                    const currentStation = this.stations[this.currentStationIndex];
+                    const nextStation = this.stations[this.currentStationIndex + 1];
+                    
+                    if (currentStation && nextStation) {
+                        // Calculate progress between current and next station
+                        const coordinateDistance = this.calculateDistance(
+                            this.currentPosition.lat, this.currentPosition.lng,
+                            nextStation.lat, nextStation.lng
+                        );
+                        const totalCoordinateDistance = this.calculateDistance(
+                            currentStation.lat, currentStation.lng,
+                            nextStation.lat, nextStation.lng
+                        );
+                        
+                        if (totalCoordinateDistance > 0) {
+                            segmentProgress = 1 - (coordinateDistance / totalCoordinateDistance);
+                        }
+                    }
+                }
+                
+                // Overall progress = (completed stations + segment progress) / total stations * 100
+                overallProgress = ((completedStations + segmentProgress) / totalStations) * 100;
+            } else {
+                // Single station case
+                overallProgress = 100;
+            }
+        }
+        
+        // Ensure progress is between 0 and 100
+        overallProgress = Math.max(0, Math.min(100, overallProgress));
+        
+        // Update progress bar visual
+        progressFill.style.width = `${overallProgress}%`;
+        progressText.textContent = `${Math.round(overallProgress)}%`;        
     }
     
     
@@ -605,11 +721,11 @@ class TrainMonitor {
             return;
         }
         
-        // Check if events panel (right sidebar) is open
+        // Check if left sidebar is open
         const container = document.querySelector('.container');
-        const isSidebarOpen = container && container.classList.contains('sidebar-open');
+        const isLeftSidebarOpen = container && container.classList.contains('left-sidebar-open');
         
-        if (isSidebarOpen) {
+        if (isLeftSidebarOpen) {
             // When sidebar is open, we need to account for the reduced map area
             // The sidebar is 400px wide, so we need to offset the center to the right
             const offsetX = 200; // Half of 400px to center in the remaining space
@@ -641,8 +757,82 @@ class TrainMonitor {
         
         console.log(`🚂 Panned to train ${this.currentTrainNumber} marker position`);
         console.log(`🚂 Train marker coordinates: lat=${trainPosition.lat}, lon=${trainPosition.lng}`);
-        console.log(`🚂 Events panel state: ${isSidebarOpen ? 'open' : 'closed'}`);
-        console.log(`🚂 Map center after pan: lat=${this.map.getCenter().lat}, lon=${this.map.getCenter().lng}`);
+        
+        // Check sidebar state
+        const leftSidebar = document.getElementById('leftSidebar');
+        const rightSidebar = document.getElementById('rightSidebar');
+        const leftOpen = leftSidebar && leftSidebar.classList.contains('open');
+        const rightOpen = rightSidebar && rightSidebar.classList.contains('open');        
+    }
+
+    /**
+     * Automatically pan to keep train in view during single-train simulation
+     */
+    autoPanToTrain() {
+        // Only auto-pan in single-train mode when simulation is running
+        if (this.isAllTrainsMode || !this.isRunning || !this.currentTrainNumber) {
+            return;
+        }
+
+        // Get current train position
+        const trainPosition = this.currentPosition;
+        if (!trainPosition || !this.map) {
+            return;
+        }
+
+        // Get the actual map container element to account for sidebar effects
+        const mapContainer = document.querySelector('.map-container');
+        if (!mapContainer) {
+            return;
+        }
+
+        // Get the actual visible map container dimensions (accounting for sidebars)
+        const mapContainerRect = mapContainer.getBoundingClientRect();
+        const actualMapWidth = mapContainerRect.width;
+        const actualMapHeight = mapContainerRect.height;
+        
+        // Get map bounds and center
+        const mapBounds = this.map.getBounds();
+        const mapCenter = this.map.getCenter();
+        
+        // Check if train is completely outside visible area
+        const isTrainVisible = mapBounds.contains([trainPosition.lat, trainPosition.lng]);
+        
+        if (!isTrainVisible) {
+            // Train is completely outside - definitely need to pan
+            this.map.panTo([trainPosition.lat, trainPosition.lng], {
+                animate: true,
+                duration: 1.0
+            });
+            return;
+        }
+        
+        // Train is visible - check if it's getting too close to edges
+        const trainPoint = this.map.latLngToContainerPoint(trainPosition);
+        
+        // Calculate edge distances using actual map container dimensions
+        const distanceFromLeft = trainPoint.x;
+        const distanceFromRight = actualMapWidth - trainPoint.x;
+        const distanceFromTop = trainPoint.y;
+        const distanceFromBottom = actualMapHeight - trainPoint.y;
+        
+        // Define edge threshold as 20% of actual visible map size
+        const edgeThreshold = Math.min(actualMapWidth, actualMapHeight) * 0.2;
+        
+        // Check if train is within 20% of any edge
+        const nearLeftEdge = distanceFromLeft < edgeThreshold;
+        const nearRightEdge = distanceFromRight < edgeThreshold;
+        const nearTopEdge = distanceFromTop < edgeThreshold;
+        const nearBottomEdge = distanceFromBottom < edgeThreshold;
+        
+        // Only pan if train is close to edges
+        if (nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge) {
+            // Smooth pan to keep train in view
+            this.map.panTo([trainPosition.lat, trainPosition.lng], {
+                animate: true,
+                duration: 1.2 // Slightly slower for less distraction
+            });
+        }
     }
     
     updateShowTrainButtonState(enabled) {
@@ -675,7 +865,10 @@ class TrainMonitor {
                 return false;
             }
             
-            console.log('🔄 Connecting to Solace broker...');
+            // Check broker type before attempting connection
+            const brokerType = window.solaceTrainMonitor.brokerType || 'solace';
+            console.log(`🔄 Connecting to ${brokerType} broker...`);
+            
             await window.solaceTrainMonitor.connect();
             this.solaceConnected = true;
             this.solaceEnabled = true;
@@ -683,10 +876,10 @@ class TrainMonitor {
             // Subscribe to train events for real-time updates
             await this.setupSolaceSubscriptions();
             
-            console.log('✅ Connected to Solace broker successfully');
+            console.log(`✅ Connected to ${brokerType} broker successfully`);
             return true;
         } catch (error) {
-            console.error('❌ Failed to connect to Solace broker:', error);
+            console.error('❌ Failed to connect to broker:', error);
             this.solaceConnected = false;
             return false;
         }
@@ -695,75 +888,22 @@ class TrainMonitor {
     async setupSolaceSubscriptions() {
         if (!this.solaceConnected) return;
         
+        // Check if Solace integration is ready and connected
+        if (!window.solaceTrainMonitor || !window.solaceTrainMonitor.isConnected) {
+            console.log('⚠️ Solace integration not ready, skipping subscriptions');
+            return;
+        }
+        
         try {
-            // Subscribe to all train status updates
-            await window.solaceTrainMonitor.subscribeToAllTrainStatus((topic, payload, message) => {
-                console.log('📨 Received train status update:', topic, payload);
-                this.handleSolaceTrainStatusUpdate(topic, payload);
-            });
-            
-            // Subscribe to all train position updates
-            await window.solaceTrainMonitor.subscribeToAllTrainPositions((topic, payload, message) => {
-                console.log('📨 Received train position update:', topic, payload);
-                this.handleSolaceTrainPositionUpdate(topic, payload);
-            });
-            
-            console.log('✅ Solace subscriptions set up successfully');
+            // Note: Legacy train/status/* and train/position/* subscriptions removed
+            // All train events are now handled through TMS topics (tms/train/*, tms/station/*, tms/alert/*)
+            console.log('✅ Solace subscriptions set up successfully (using TMS topics only)');
         } catch (error) {
             console.error('❌ Failed to set up Solace subscriptions:', error);
         }
     }
     
-    handleSolaceTrainStatusUpdate(topic, payload) {
-        try {
-            const data = JSON.parse(payload);
-            console.log('🚂 Processing train status update:', data);
-            
-            // Update UI or trigger actions based on received status
-            if (data.status === 'stopped' && data.data && data.data.station) {
-                console.log(`🚉 Train ${data.trainNumber} stopped at ${data.data.station}`);
-            }
-        } catch (error) {
-            console.error('❌ Error processing train status update:', error);
-        }
-    }
     
-    handleSolaceTrainPositionUpdate(topic, payload) {
-        try {
-            const data = JSON.parse(payload);
-            console.log('🚂 Processing train position update:', data);
-            
-            // Update train position on map if needed
-            if (this.isAllTrainsMode && this.allTrainMarkers.has(data.trainNumber)) {
-                const marker = this.allTrainMarkers.get(data.trainNumber);
-                marker.setLatLng([data.position.lat, data.position.lng]);
-            }
-        } catch (error) {
-            console.error('❌ Error processing train position update:', error);
-        }
-    }
-    
-    async publishTrainStatusToSolace(trainNumber, status, data = {}) {
-        if (!this.solaceConnected) return;
-        
-        try {
-            await window.solaceTrainMonitor.publishTrainStatus(trainNumber, status, data);
-            console.log(`📤 Published train status to Solace: ${trainNumber} - ${status}`);
-        } catch (error) {
-            console.error('❌ Failed to publish train status to Solace:', error);
-        }
-    }
-    
-    async publishTrainPositionToSolace(trainNumber, position, speed, station) {
-        if (!this.solaceConnected) return;
-        
-        try {
-            await window.solaceTrainMonitor.publishTrainPosition(trainNumber, position, speed, station);
-            console.log(`📤 Published train position to Solace: ${trainNumber} at ${station}`);
-        } catch (error) {
-            console.error('❌ Failed to publish train position to Solace:', error);
-        }
-    }
     
     async disconnectFromSolace() {
         if (this.solaceConnected && window.solaceTrainMonitor) {
@@ -787,88 +927,302 @@ class TrainMonitor {
     }
     
     async initializeSolace() {
-        // Try to connect to Solace broker (optional - won't fail if broker is not available)
+        // Try to connect to broker (Solace or in-memory)
         try {
-            console.log('🔄 Attempting to connect to Solace broker...');
+            // Check if Solace integration is available and what broker type is configured
+            if (window.solaceTrainMonitor) {
+                const brokerType = window.solaceTrainMonitor.brokerType || 'solace';
+                console.log(`🔄 Attempting to connect to ${brokerType} broker...`);
+                
             const connected = await this.connectToSolace();
             if (connected) {
-                console.log('✅ Solace integration enabled - train events will be published to broker');
+                    console.log(`✅ ${brokerType} broker integration enabled - train events will be published to broker`);
             } else {
-                console.log('⚠️ Solace broker not available - continuing without real-time messaging');
+                    console.log(`⚠️ ${brokerType} broker not available - continuing without real-time messaging`);
+                }
+            } else {
+                console.log('⚠️ Solace integration not available - continuing without real-time messaging');
             }
         } catch (error) {
-            console.log('⚠️ Solace broker not available - continuing without real-time messaging');
+            console.log('⚠️ Broker connection failed - continuing without real-time messaging');
         }
     }
     
-    initializeSidebar() {
-        // Set sidebar to collapsed state by default
-        const controlPanel = document.querySelector('.control-panel');
-        const toggleBtn = document.getElementById('toggleSidebarBtn');
-        const floatingBtn = document.getElementById('floatingToggleBtn');
+    initializeRightSidebar() {
+        // Set right sidebar to collapsed state by default
+        const rightSidebar = document.getElementById('rightSidebar');
+        const container = document.querySelector('.container');
         
-        if (controlPanel && toggleBtn && floatingBtn) {
-            // Set initial collapsed state
-            controlPanel.classList.add('collapsed');
-            controlPanel.classList.remove('expanded');
-            document.body.classList.remove('control-panel-expanded');
+        console.log('🚂 initializeRightSidebar called');
+        console.log('🚂 rightSidebar element:', rightSidebar);
+        console.log('🚂 container element:', container);
+        
+        if (rightSidebar && container) {
+            // Force initial collapsed state (panel starts off-screen)
+            rightSidebar.classList.remove('open');
+            container.classList.remove('right-sidebar-open');
             
-            // Hide sidebar button, show floating button
-            toggleBtn.style.display = 'none';
-            floatingBtn.style.display = 'flex';
-            floatingBtn.title = 'Train Monitoring System';
+            // Ensure the sidebar is positioned off-screen
+            rightSidebar.style.right = '-400px';
+            
+            console.log('🚂 Right sidebar initialized - classes:', rightSidebar.className);
+            console.log('🚂 Container initialized - classes:', container.className);
+            console.log('🚂 Right sidebar style.right:', rightSidebar.style.right);
+        } else {
+            console.error('❌ Right sidebar or container element not found during initialization');
         }
     }
     
-    toggleSidebar() {
-        const controlPanel = document.querySelector('.control-panel');
-        const toggleBtn = document.getElementById('toggleSidebarBtn');
-        const floatingBtn = document.getElementById('floatingToggleBtn');
-        
-        if (controlPanel && toggleBtn && floatingBtn) {
-            // Toggle between collapsed and expanded states
-            if (controlPanel.classList.contains('collapsed')) {
-                // Currently collapsed - expand it
-                controlPanel.classList.remove('collapsed');
-                controlPanel.classList.add('expanded');
-                document.body.classList.add('control-panel-expanded');
-                toggleBtn.style.display = 'flex';
-                floatingBtn.style.display = 'none';
-                toggleBtn.title = 'Collapse Sidebar';
-            } else {
-                // Currently expanded - collapse it
-                controlPanel.classList.remove('expanded');
-                controlPanel.classList.add('collapsed');
-                document.body.classList.remove('control-panel-expanded');
-                toggleBtn.style.display = 'none';
-                floatingBtn.style.display = 'flex';
-                floatingBtn.title = 'Train Monitoring System';
+    adjustMapBoundsForSidebars() {
+        // Adjust map bounds when sidebars are open to ensure train markers are visible
+        if (this.map && this.currentTrainData) {
+            const leftSidebar = document.getElementById('leftSidebar');
+            const rightSidebar = document.getElementById('rightSidebar');
+            const leftOpen = leftSidebar && leftSidebar.classList.contains('open');
+            const rightOpen = rightSidebar && rightSidebar.classList.contains('open');
+            
+            if (leftOpen || rightOpen) {
+                // Re-fit the map bounds to show the train route
+                setTimeout(() => {
+                    if (this.currentTrainData && this.currentTrainData.route) {
+                        const bounds = L.latLngBounds();
+                        this.currentTrainData.route.forEach(station => {
+                            if (station.lat && station.lng) {
+                                bounds.extend([station.lat, station.lng]);
+                            }
+                        });
+                        this.map.fitBounds(bounds, { padding: [20, 20] });
+                        console.log('🗺️ Adjusted map bounds for sidebar visibility');
+                    }
+                }, 100);
             }
         }
     }
     
     toggleRightSidebar() {
-        const leftSidebar = document.getElementById('leftSidebar');
+        const rightSidebar = document.getElementById('rightSidebar');
         const container = document.querySelector('.container');
-        if (leftSidebar && container) {
-            const isOpen = leftSidebar.classList.contains('open');
-            leftSidebar.classList.toggle('open');
-            container.classList.toggle('sidebar-open');
-            console.log(`📋 Events sidebar ${isOpen ? 'closed' : 'opened'}`);
+        const mapContainer = document.querySelector('.map-container');
+        
+        console.log('🚂 toggleRightSidebar called');
+        console.log('🚂 rightSidebar element:', rightSidebar);
+        console.log('🚂 container element:', container);
+        console.log('🚂 mapContainer element:', mapContainer);
+        
+        // Check if elements exist
+        if (!rightSidebar) {
+            console.error('❌ rightSidebar element not found!');
+            return;
+        }
+        if (!container) {
+            console.error('❌ container element not found!');
+            return;
+        }
+        if (!mapContainer) {
+            console.error('❌ mapContainer element not found!');
+            return;
+        }
+        
+        if (rightSidebar && container && mapContainer) {
+            const isOpen = rightSidebar.classList.contains('open');
+            console.log('🚂 Current state - isOpen:', isOpen);
+            
+            // Log current map container state
+            const mapRect = mapContainer.getBoundingClientRect();
+            const mapStyles = window.getComputedStyle(mapContainer);
+            console.log('🚂 BEFORE - Map container position:', {
+                left: mapRect.left,
+                width: mapRect.width,
+                marginLeft: mapStyles.marginLeft,
+                marginRight: mapStyles.marginRight,
+                containerClasses: container.className
+            });
+            
+            rightSidebar.classList.toggle('open');
+            container.classList.toggle('right-sidebar-open');
+            
+        // Ensure proper positioning
+        if (rightSidebar.classList.contains('open')) {
+            // Opening right sidebar
+            rightSidebar.style.right = '0px';
+            // Check if left sidebar is also open
+            const leftSidebar = document.getElementById('leftSidebar');
+            if (leftSidebar && leftSidebar.classList.contains('open')) {
+                // Both sidebars open - center the map
+                mapContainer.style.setProperty('transform', 'translateX(0px)', 'important');
+                console.log('🚂 Opening right sidebar - both sidebars open, centering map');
+                // Adjust map bounds for both sidebars
+                this.adjustMapBoundsForSidebars();
+            } else {
+                // Only right sidebar open - move map left
+                mapContainer.style.setProperty('transform', 'translateX(-400px)', 'important');
+                console.log('🚂 Opening right sidebar - setting transform translateX(-400px)');
+                // Adjust map bounds for single sidebar
+                this.adjustMapBoundsForSidebars();
+            }
+            } else {
+            // Closing right sidebar
+            rightSidebar.style.right = '-400px';
+            // Check if left sidebar is still open
+            const leftSidebar = document.getElementById('leftSidebar');
+            if (leftSidebar && leftSidebar.classList.contains('open')) {
+                // Left sidebar still open - move map right
+                mapContainer.style.setProperty('transform', 'translateX(400px)', 'important');
+                console.log('🚂 Closing right sidebar - left sidebar still open, moving map right');
+            } else {
+                // No sidebars open - reset to center
+                mapContainer.style.setProperty('transform', 'translateX(0px)', 'important');
+                console.log('🚂 Closing right sidebar - no sidebars open, centering map');
+            }
+        }
+            
+            // Log after state
+            setTimeout(() => {
+                const newMapRect = mapContainer.getBoundingClientRect();
+                const newMapStyles = window.getComputedStyle(mapContainer);
+                console.log('🚂 AFTER - Map container position:', {
+                    left: newMapRect.left,
+                    width: newMapRect.width,
+                    marginLeft: newMapStyles.marginLeft,
+                    marginRight: newMapStyles.marginRight,
+                    containerClasses: container.className
+                });
+                console.log('🚂 MAP MOVEMENT:', {
+                    leftChange: newMapRect.left - mapRect.left,
+                    widthChange: newMapRect.width - mapRect.width
+                });
+            }, 100);
+            
+            console.log('🚂 After toggle - rightSidebar classes:', rightSidebar.className);
+            console.log('🚂 After toggle - container classes:', container.className);
+            console.log('🚂 After toggle - rightSidebar style.right:', rightSidebar.style.right);
+            console.log(`🚂 Right sidebar ${isOpen ? 'closed' : 'opened'}`);
         } else {
-            console.error('❌ Events sidebar or container element not found');
+            console.error('❌ Right sidebar, container, or mapContainer element not found');
         }
     }
     
-    closeRightSidebar() {
+    toggleLeftSidebar() {
         const leftSidebar = document.getElementById('leftSidebar');
         const container = document.querySelector('.container');
-        if (leftSidebar && container) {
-            leftSidebar.classList.remove('open');
-            container.classList.remove('sidebar-open');
-            console.log('📋 Events sidebar closed');
+        const mapContainer = document.querySelector('.map-container');
+        
+        if (leftSidebar && container && mapContainer) {
+            const isOpen = leftSidebar.classList.contains('open');
+            console.log('📋 Current state - isOpen:', isOpen);
+            
+            // Log current map container state
+            const mapRect = mapContainer.getBoundingClientRect();
+            const mapStyles = window.getComputedStyle(mapContainer);
+            console.log('📋 BEFORE - Map container position:', {
+                left: mapRect.left,
+                width: mapRect.width,
+                marginLeft: mapStyles.marginLeft,
+                marginRight: mapStyles.marginRight,
+                containerClasses: container.className
+            });
+            
+            leftSidebar.classList.toggle('open');
+            container.classList.toggle('left-sidebar-open');
+            
+        // Ensure proper positioning
+        if (leftSidebar.classList.contains('open')) {
+            // Opening left sidebar
+            leftSidebar.style.left = '0px';
+            // Check if right sidebar is also open
+            const rightSidebar = document.getElementById('rightSidebar');
+            if (rightSidebar && rightSidebar.classList.contains('open')) {
+                // Both sidebars open - center the map
+                mapContainer.style.setProperty('transform', 'translateX(0px)', 'important');
+                console.log('📋 Opening left sidebar - both sidebars open, centering map');
+                // Adjust map bounds for both sidebars
+                this.adjustMapBoundsForSidebars();
         } else {
-            console.error('❌ Events sidebar or container element not found');
+                // Only left sidebar open - move map right
+                mapContainer.style.setProperty('transform', 'translateX(400px)', 'important');
+                console.log('📋 Opening left sidebar - setting transform translateX(400px)');
+                // Adjust map bounds for single sidebar
+                this.adjustMapBoundsForSidebars();
+            }
+        } else {
+            // Closing left sidebar
+            leftSidebar.style.left = '-400px';
+            // Check if right sidebar is still open
+            const rightSidebar = document.getElementById('rightSidebar');
+            if (rightSidebar && rightSidebar.classList.contains('open')) {
+                // Right sidebar still open - move map left
+                mapContainer.style.setProperty('transform', 'translateX(-400px)', 'important');
+                console.log('📋 Closing left sidebar - right sidebar still open, moving map left');
+            } else {
+                // No sidebars open - reset to center
+                mapContainer.style.setProperty('transform', 'translateX(0px)', 'important');
+                console.log('📋 Closing left sidebar - no sidebars open, centering map');
+            }
+        }
+            
+            // Log after state
+            setTimeout(() => {
+                const newMapRect = mapContainer.getBoundingClientRect();
+                const newMapStyles = window.getComputedStyle(mapContainer);
+                console.log('📋 AFTER - Map container position:', {
+                    left: newMapRect.left,
+                    width: newMapRect.width,
+                    marginLeft: newMapStyles.marginLeft,
+                    marginRight: newMapStyles.marginRight,
+                    containerClasses: container.className
+                });
+                console.log('📋 MAP MOVEMENT:', {
+                    leftChange: newMapRect.left - mapRect.left,
+                    widthChange: newMapRect.width - mapRect.width
+                });
+            }, 100);
+        } else {
+            console.error('❌ Left sidebar, container, or mapContainer element not found');
+        }
+    }
+    
+    closeLeftSidebar() {
+        const leftSidebar = document.getElementById('leftSidebar');
+        const container = document.querySelector('.container');
+        const mapContainer = document.querySelector('.map-container');
+        
+        if (leftSidebar && container && mapContainer) {
+            // Log current map container state
+            const mapRect = mapContainer.getBoundingClientRect();
+            const mapStyles = window.getComputedStyle(mapContainer);
+            console.log('📋 BEFORE CLOSE - Map container position:', {
+                left: mapRect.left,
+                width: mapRect.width,
+                marginLeft: mapStyles.marginLeft,
+                marginRight: mapStyles.marginRight,
+                containerClasses: container.className
+            });
+            
+            leftSidebar.classList.remove('open');
+            container.classList.remove('left-sidebar-open');
+            leftSidebar.style.left = '-400px';
+            
+            // Reset map container transform
+            mapContainer.style.setProperty('transform', 'translateX(0px)', 'important');
+            
+            // Log after state
+            setTimeout(() => {
+                const newMapRect = mapContainer.getBoundingClientRect();
+                const newMapStyles = window.getComputedStyle(mapContainer);
+                console.log('📋 AFTER CLOSE - Map container position:', {
+                    left: newMapRect.left,
+                    width: newMapRect.width,
+                    marginLeft: newMapStyles.marginLeft,
+                    marginRight: newMapStyles.marginRight,
+                    containerClasses: container.className
+                });
+                console.log('📋 MAP RESET MOVEMENT:', {
+                    leftChange: newMapRect.left - mapRect.left,
+                    widthChange: newMapRect.width - mapRect.width
+                });
+            }, 100);            
+        } else {
+            console.error('❌ Left sidebar, container, or mapContainer element not found');
         }
     }
     
@@ -1007,22 +1361,35 @@ class TrainMonitor {
             console.warn('🚩 Map not available for flag creation');
             return;
         }
+        
+        // Check if station coordinates are loaded
+        if (typeof stationCoordinatesFromCSV === 'undefined' || Object.keys(stationCoordinatesFromCSV).length === 0) {
+            console.warn(`🚩 Station coordinates not loaded yet, deferring flag creation for ${stationCode}`);
+            // Retry after a short delay
+            setTimeout(() => this.addAlertFlag(stationCode, alertCount), 500);
+            return;
+        }
 
         // Remove existing flag if any
         this.removeAlertFlag(stationCode);
-        
+
         // Don't create flag if alert count is 0
         if (alertCount === 0) {
             console.log(`🚩 No flag created for ${stationCode} - alert count is 0`);
             return;
         }
 
-        // Find station coordinates
-        const station = this.stations.find(s => s.code === stationCode);
+        // Find station coordinates from global CSV data
+        let station = null;
+        if (typeof stationCoordinatesFromCSV !== 'undefined' && stationCoordinatesFromCSV[stationCode]) {
+            station = stationCoordinatesFromCSV[stationCode];
+        }
+        
         if (!station || !station.lat || !station.lng) {
             console.warn(`🚩 Station ${stationCode} not found or missing coordinates`, {
                 station: station,
-                stationsCount: this.stations?.length || 0
+                stationsCount: this.stations?.length || 0,
+                csvStationsCount: typeof stationCoordinatesFromCSV !== 'undefined' ? Object.keys(stationCoordinatesFromCSV).length : 0
             });
             return;
         }
@@ -1355,7 +1722,12 @@ class TrainMonitor {
         if (!this.map) return;
         
         for (const [stationCode, flag] of this.alertFlags.entries()) {
-            const station = this.stations.find(s => s.code === stationCode);
+            // Use global CSV data instead of this.stations
+            let station = null;
+            if (typeof stationCoordinatesFromCSV !== 'undefined' && stationCoordinatesFromCSV[stationCode]) {
+                station = stationCoordinatesFromCSV[stationCode];
+            }
+            
             if (station && station.lat && station.lng) {
                 const point = this.map.latLngToContainerPoint([station.lat, station.lng]);
                 // Position flag slightly above the station marker (offset by 15px up and 8px right for pole alignment)
@@ -2341,6 +2713,9 @@ class TrainMonitor {
             
             // Enable Show Train button when a train is selected
             this.updateShowTrainButtonState(true);
+            
+            // Initialize progress bar to 0% when train is first selected
+            this.updateProgressBar();
         } else {
             // Disable Show Train button when no train is selected
             this.updateShowTrainButtonState(false);
@@ -2610,19 +2985,11 @@ class TrainMonitor {
             // Update position for this train
             await this.updateAllTrainPosition(trainNumber, trainData, trainState);
             
-            // Update marker position and color
+            // Update marker position
             const marker = this.allTrainMarkers.get(trainNumber);
             if (marker) {
+                // Only update position - don't recreate the icon to prevent flashing
                 marker.setLatLng([trainState.currentPosition.lat, trainState.currentPosition.lng]);
-                
-                // Update marker icon (keep using the same train icon as single train mode)
-                const newIcon = L.divIcon({
-                    className: 'train-marker',
-                    html: this.createTrainIcon(), // Use the same train icon as single train mode
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
-                });
-                marker.setIcon(newIcon);
                 
                 // Update popup with current information (tooltip is static to avoid interfering with auto-hide)
                 const trainData = this.allTrains.get(trainNumber);
@@ -2953,6 +3320,9 @@ class TrainMonitor {
         // Update train marker position - ensure currentPosition is valid
         if (this.trainMarker && this.currentPosition && this.currentPosition.lat !== undefined && this.currentPosition.lng !== undefined) {
             this.trainMarker.setLatLng([this.currentPosition.lat, this.currentPosition.lng]);
+            
+            // Auto-pan to keep train in view during single-train simulation
+            this.autoPanToTrain();
             
             // Tooltip content is updated on mouseover for better performance
         }

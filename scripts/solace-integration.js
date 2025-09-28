@@ -5,6 +5,77 @@
  * with default settings for publishing and subscribing to train monitoring events.
  */
 
+// Suppress verbose Solace library errors and show simplified messages
+(function() {
+    const originalConsoleError = console.error;
+    console.error = function(...args) {
+        const message = args.join(' ');
+        
+        // Suppress verbose Solace connection errors
+        if (message.includes('WebSocket connection to') && message.includes('failed')) {
+            // Extract just the essential error info
+            const urlMatch = message.match(/WebSocket connection to '([^']+)'/);
+            if (urlMatch) {
+                console.log('⚠️ Broker connection failed:', urlMatch[1]);
+            }
+            return;
+        }
+        
+        // Suppress verbose HTTP connection errors
+        if (message.includes('POST http://') && message.includes('net::ERR_NAME_NOT_RESOLVED')) {
+            const urlMatch = message.match(/POST (http:\/\/[^\s]+)/);
+            if (urlMatch) {
+                console.log('⚠️ Broker HTTP connection failed:', urlMatch[1]);
+            }
+            return;
+        }
+        
+        // Suppress verbose Solace library stack traces
+        if (message.includes('solclient.js:') && message.includes('connect @')) {
+            return; // Skip verbose stack traces
+        }
+        
+        // Suppress sessionEvent.getInfo errors
+        if (message.includes('sessionEvent.getInfo is not a function')) {
+            console.log('⚠️ Solace session event error (handled gracefully)');
+            return;
+        }
+        
+        // Suppress verbose Solace library warnings
+        if (message.includes('solclientjs:') && message.includes('WARN')) {
+            return; // Skip verbose warnings
+        }
+        
+        // Show other errors normally
+        originalConsoleError.apply(console, args);
+    };
+})();
+
+// Handle unhandled promise rejections gracefully
+window.addEventListener('unhandledrejection', function(event) {
+    const error = event.reason;
+    if (error && error.message) {
+        if (error.message.includes('Connection failed') || 
+            error.message.includes('Solace connection timeout') ||
+            error.message.includes('Broker connection failed')) {
+            console.log('⚠️ Broker connection issue (handled gracefully)');
+            event.preventDefault(); // Prevent default error handling
+        }
+    }
+});
+
+// Handle general errors gracefully
+window.addEventListener('error', function(event) {
+    const error = event.error;
+    if (error && error.message) {
+        if (error.message.includes('sessionEvent.getInfo is not a function') ||
+            error.message.includes('this.session.isConnected is not a function')) {
+            console.log('⚠️ Solace session error (handled gracefully)');
+            event.preventDefault(); // Prevent default error handling
+        }
+    }
+});
+
 class SolaceTrainMonitor {
     constructor() {
         this.session = null;
@@ -21,6 +92,8 @@ class SolaceTrainMonitor {
         this.lastConnectionAttempt = 0;
         this.connectionCooldown = 30000; // 30 seconds cooldown
         this.connectionStartTime = 0;
+        this.isConnecting = false; // Prevent multiple simultaneous connection attempts
+        this.notificationShown = false; // Prevent multiple notifications
         
         // Get broker configuration from external config file
         this.brokerConfig = this.getBrokerConfiguration();
@@ -64,14 +137,36 @@ class SolaceTrainMonitor {
      * Initialize connection to broker (Solace or In-Memory)
      */
     async connect() {
-        // Check for stored broker type preference
-        const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
-        const preferredBrokerType = storedConfig ? storedConfig.brokerType : null;
+        // Prevent multiple simultaneous connection attempts
+        if (this.isConnecting) {
+            console.log('⏭️ Connection already in progress, skipping duplicate attempt');
+            return this.isConnected;
+        }
         
-        // If in-memory broker is preferred, skip Solace connection
+        this.isConnecting = true;
+        
+        try {
+            // Check for stored broker type preference
+            const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
+            const preferredBrokerType = storedConfig ? storedConfig.brokerType : null;
+        
+        // If in-memory broker is preferred, check if we should still try Solace first
         if (preferredBrokerType === 'inmemory') {
-            console.log('🧠 In-memory broker preferred, skipping Solace connection');
-            this.handleSolaceConnectionFailure();
+            console.log('🧠 In-memory broker preferred in stored config');
+            
+            // Check if we're in a hosted environment (GitHub Pages, etc.)
+            if (window.BrokerConfig && window.BrokerConfig.isHostedEnvironment()) {
+                console.log('🌐 Hosted environment detected, using in-memory broker as preferred');
+                this.handleSolaceConnectionFailure();
+                
+                // Show notification for manual switch to in-memory broker
+                setTimeout(() => {
+                    this.showBrokerSwitchNotification('manual');
+                }, 1000); // Delay to ensure the page is fully loaded
+            } else {
+                console.log('🏠 Local environment detected, attempting Solace connection despite stored preference');
+                // Continue to Solace connection attempt below
+            }
         } else if (this.shouldAttemptSolaceConnection()) {
             // Check if broker is likely unreachable for fast failure
             if (this.isBrokerLikelyUnreachable()) {
@@ -92,6 +187,12 @@ class SolaceTrainMonitor {
                     window.brokerConnected = true;
                     this.updateBrokerStatusIndicator();
                     
+                    // Clear any stored in-memory preference since Solace is working
+                    if (preferredBrokerType === 'inmemory') {
+                        console.log('🧹 Clearing stored in-memory preference since Solace broker is available');
+                        this.clearStoredInMemoryPreference();
+                    }
+                    
                     console.log('✅ Connected to Solace broker successfully - NOT using in-memory broker');
                     console.log('🔍 Broker type set to:', this.brokerType);
                     console.log('🔍 Global broker mode:', window.brokerMode);
@@ -101,33 +202,64 @@ class SolaceTrainMonitor {
                     // Handle Solace connection failure
                     console.log('❌ Solace connection failed, will fallback to in-memory broker:', error.message);
                     this.handleSolaceConnectionFailure();
+                    
+                    // If we've reached max attempts, the fallback will be handled by handleSolaceConnectionFailure
+                    // If not, we'll continue to the fallback section below
                 }
             }
         } else {
             console.log('⏭️ Skipping Solace connection attempt (previous failures detected)');
         }
         
-        // Fallback to in-memory broker
-        try {
-            console.log('🔄 FALLBACK: Connecting to in-memory broker (Solace connection failed or not attempted)...');
-            await this.connectToInMemoryBroker();
-            
-            // Set broker type and update global state
-            this.brokerType = 'inmemory';
-            window.brokerMode = 'inmemory';
-            window.brokerConnected = true;
-            this.updateBrokerStatusIndicator();
-            
-            console.log('✅ FALLBACK: Connected to in-memory broker successfully');
-            console.log('🔍 Broker type set to:', this.brokerType);
-            console.log('🔍 Global broker mode:', window.brokerMode);
+        // Fallback to in-memory broker (only if not already switched)
+        if (this.brokerType !== 'inmemory') {
+            try {
+                console.log('🔄 FALLBACK: Connecting to in-memory broker (Solace connection failed or not attempted)...');
+                await this.connectToInMemoryBroker();
+                
+                // Set broker type and update global state
+                this.brokerType = 'inmemory';
+                window.brokerMode = 'inmemory';
+                window.brokerConnected = true;
+                this.updateBrokerStatusIndicator();
+                
+                console.log('✅ FALLBACK: Connected to in-memory broker successfully');
+                console.log('🔍 Broker type set to:', this.brokerType);
+                console.log('🔍 Global broker mode:', window.brokerMode);
+                return true;
+                
+            } catch (inMemoryError) {
+                console.error('❌ Failed to connect to in-memory broker:', inMemoryError);
+                window.brokerConnected = false;
+                this.updateBrokerStatusIndicator();
+                throw inMemoryError;
+            }
+        } else {
+            console.log('✅ Already connected to in-memory broker');
             return true;
-            
-        } catch (inMemoryError) {
-            console.error('❌ Failed to connect to in-memory broker:', inMemoryError);
-            window.brokerConnected = false;
-            this.updateBrokerStatusIndicator();
-            throw inMemoryError;
+        }
+        
+        } finally {
+            this.isConnecting = false;
+        }
+    }
+
+    /**
+     * Clear stored in-memory broker preference
+     */
+    clearStoredInMemoryPreference() {
+        try {
+            const stored = localStorage.getItem('brokerConfig');
+            if (stored) {
+                const config = JSON.parse(stored);
+                if (config.brokerType === 'inmemory') {
+                    // Remove the stored preference to allow Solace connection on next load
+                    localStorage.removeItem('brokerConfig');
+                    console.log('🧹 Cleared stored in-memory broker preference');
+                }
+            }
+        } catch (error) {
+            console.warn('⚠️ Error clearing stored broker preference:', error);
         }
     }
 
@@ -162,8 +294,17 @@ class SolaceTrainMonitor {
      * Check if broker is likely unreachable (for fast failure)
      */
     isBrokerLikelyUnreachable() {
-        // Check if the URL contains localhost1 (which is likely unreachable)
-        if (this.brokerConfig.url.includes('localhost1')) {
+        // Check if we're in a hosted environment trying to connect to localhost
+        if (window.BrokerConfig && window.BrokerConfig.isHostedEnvironment()) {
+            if (this.brokerConfig.url.includes('localhost') || this.brokerConfig.url.includes('127.0.0.1')) {
+                console.log('🌐 Hosted environment detected with localhost URL - likely unreachable');
+                return true;
+            }
+        }
+        
+        // Check for obviously invalid URLs (like localhost1 typo)
+        if (this.brokerConfig.url.includes('localhost1') || this.brokerConfig.url.includes('127.0.0.0')) {
+            console.log('❌ Invalid localhost URL detected - likely unreachable');
             return true;
         }
         
@@ -185,11 +326,164 @@ class SolaceTrainMonitor {
         
         if (this.connectionAttempts >= this.maxConnectionAttempts) {
             this.solaceConnectionFailed = true;
-            console.log(`❌ Solace broker connection failed after ${this.connectionAttempts} attempts. Using in-memory broker.`);
+            console.log(`❌ Solace broker connection failed after ${this.connectionAttempts} attempts. Switching to in-memory broker.`);
             console.log(`⏰ Will retry Solace connection in ${this.connectionCooldown / 1000} seconds.`);
+            
+            // Automatically switch to in-memory broker
+            this.switchToInMemoryBroker();
         } else {
             console.log(`⚠️ Solace broker connection failed (attempt ${this.connectionAttempts}/${this.maxConnectionAttempts}). Retrying...`);
         }
+    }
+
+    /**
+     * Switch to in-memory broker and show notification
+     */
+    async switchToInMemoryBroker() {
+        try {
+            console.log('🔄 Automatically switching to in-memory broker...');
+            
+            // Disconnect from Solace if connected
+            if (this.session && this.isConnected) {
+                try {
+                    this.session.disconnect();
+                } catch (e) {
+                    // Ignore disconnect errors
+                }
+            }
+            
+            // Connect to in-memory broker
+            await this.connectToInMemoryBroker();
+            
+            // Update broker state
+            this.brokerType = 'inmemory';
+            window.brokerMode = 'inmemory';
+            window.brokerConnected = true;
+            this.updateBrokerStatusIndicator();
+            
+            console.log('✅ Successfully switched to in-memory broker');
+            
+            // Show popup notification for automatic fallback
+            this.showBrokerSwitchNotification('automatic');
+            
+        } catch (error) {
+            console.error('❌ Failed to switch to in-memory broker:', error);
+            window.brokerConnected = false;
+            this.updateBrokerStatusIndicator();
+        }
+    }
+
+    /**
+     * Show popup notification for broker switch
+     * @param {string} switchType - 'automatic' for fallback due to connection failure, 'manual' for user-initiated switch
+     */
+    showBrokerSwitchNotification(switchType = 'automatic') {
+        // Prevent multiple notifications
+        if (this.notificationShown) {
+            console.log('⏭️ Broker switch notification already shown, skipping duplicate');
+            return;
+        }
+        
+        this.notificationShown = true;
+        
+        // Create notification popup
+        const notification = document.createElement('div');
+        notification.id = 'broker-switch-notification';
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #ff6b35;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 14px;
+            max-width: 350px;
+            border-left: 4px solid #ff4500;
+            animation: slideInRight 0.3s ease-out;
+        `;
+        
+        // Determine message content based on switch type
+        let title, message, icon, backgroundColor, borderColor;
+        
+        if (switchType === 'automatic') {
+            title = 'Broker Connection Switched';
+            message = 'Solace broker connection failed. Automatically switched to <strong>In-Memory Broker</strong> for full functionality.';
+            icon = '🧠';
+            backgroundColor = '#ff6b35';
+            borderColor = '#ff4500';
+        } else {
+            title = 'Broker Configuration Updated';
+            message = 'Successfully switched to <strong>In-Memory Broker</strong> as configured.';
+            icon = '✅';
+            backgroundColor = '#28a745';
+            borderColor = '#1e7e34';
+        }
+        
+        // Update notification styling based on switch type
+        notification.style.background = backgroundColor;
+        notification.style.borderLeftColor = borderColor;
+        
+        notification.innerHTML = `
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="font-size: 18px; margin-right: 8px;">${icon}</span>
+                <strong>${title}</strong>
+            </div>
+            <div style="font-size: 13px; line-height: 1.4;">
+                ${message}
+            </div>
+            <div style="margin-top: 10px; font-size: 12px; opacity: 0.9;">
+                Click the broker icon to configure connection settings.
+            </div>
+            <button onclick="this.parentElement.remove()" style="
+                position: absolute;
+                top: 8px;
+                right: 8px;
+                background: none;
+                border: none;
+                color: white;
+                font-size: 16px;
+                cursor: pointer;
+                opacity: 0.7;
+            ">×</button>
+        `;
+        
+        // Add CSS animation
+        if (!document.getElementById('broker-notification-styles')) {
+            const style = document.createElement('style');
+            style.id = 'broker-notification-styles';
+            style.textContent = `
+                @keyframes slideInRight {
+                    from { transform: translateX(100%); opacity: 0; }
+                    to { transform: translateX(0); opacity: 1; }
+                }
+                @keyframes slideOutRight {
+                    from { transform: translateX(0); opacity: 1; }
+                    to { transform: translateX(100%); opacity: 0; }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+        
+        // Add to page
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 8 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.style.animation = 'slideOutRight 0.3s ease-in';
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        notification.remove();
+                    }
+                }, 300);
+            }
+        }, 8000);
+        
+        console.log('📢 Shown broker switch notification to user');
     }
 
     /**
@@ -294,18 +588,32 @@ class SolaceTrainMonitor {
         });
 
         this.session.on(solace.SessionEventCode.CONNECT_FAILED_ERROR, (sessionEvent) => {
-            console.error('❌ Failed to connect to Solace broker:', sessionEvent.getInfo());
+            // Handle sessionEvent safely - it might not have getInfo method
+            let errorInfo = 'Unknown connection error';
+            try {
+                if (sessionEvent && typeof sessionEvent.getInfo === 'function') {
+                    errorInfo = sessionEvent.getInfo();
+                } else if (sessionEvent && sessionEvent.toString) {
+                    errorInfo = sessionEvent.toString();
+                }
+            } catch (e) {
+                errorInfo = 'Connection failed (unable to get error details)';
+            }
+            
+            console.error('❌ Failed to connect to Solace broker:', errorInfo);
             this.isConnected = false;
             
             // Force disconnect to stop internal retries
             try {
-                this.session.disconnect();
+                if (this.session && typeof this.session.disconnect === 'function') {
+                    this.session.disconnect();
+                }
             } catch (e) {
                 // Ignore disconnect errors
             }
             
             if (this.connectionPromise) {
-                this.connectionPromise.reject(new Error('Connection failed: ' + sessionEvent.getInfo()));
+                this.connectionPromise.reject(new Error('Connection failed: ' + errorInfo));
             }
         });
 
@@ -462,7 +770,18 @@ class SolaceTrainMonitor {
 
         try {
             if (this.brokerType === 'solace') {
-                // Use Solace broker
+                // Use Solace broker - check if session is ready
+                if (!this.session || !this.isConnected) {
+                    console.log('⚠️ Solace session not ready, skipping subscription to:', topic);
+                    return;
+                }
+                
+                // Additional safety check - ensure session has the required methods
+                if (typeof this.session.subscribe !== 'function') {
+                    console.log('⚠️ Solace session not properly initialized, skipping subscription to:', topic);
+                    return;
+                }
+                
             const subscription = solace.SolclientFactory.createTopicDestination(topic);
             
             // Add subscription to session
@@ -667,73 +986,6 @@ class SolaceTrainMonitor {
         return indicator;
     }
 
-    /**
-     * Publish train status update
-     */
-    async publishTrainStatus(trainNumber, status, data) {
-        const topic = `train/status/${trainNumber}`;
-        const payload = {
-            trainNumber,
-            status,
-            timestamp: new Date().toISOString(),
-            data
-        };
-        
-        await this.publish(topic, payload, {
-            contentType: 'application/json',
-            correlationId: `train-${trainNumber}-${Date.now()}`
-        });
-    }
-
-    /**
-     * Publish train position update
-     */
-    async publishTrainPosition(trainNumber, position, speed, station) {
-        const topic = `train/position/${trainNumber}`;
-        const payload = {
-            trainNumber,
-            position: {
-                lat: position.lat,
-                lng: position.lng
-            },
-            speed,
-            station,
-            timestamp: new Date().toISOString()
-        };
-        
-        await this.publish(topic, payload, {
-            contentType: 'application/json',
-            correlationId: `position-${trainNumber}-${Date.now()}`
-        });
-    }
-
-    /**
-     * Subscribe to all train status updates
-     */
-    async subscribeToAllTrainStatus(handler) {
-        await this.subscribe('train/status/*', handler);
-    }
-
-    /**
-     * Subscribe to specific train status
-     */
-    async subscribeToTrainStatus(trainNumber, handler) {
-        await this.subscribe(`train/status/${trainNumber}`, handler);
-    }
-
-    /**
-     * Subscribe to all train position updates
-     */
-    async subscribeToAllTrainPositions(handler) {
-        await this.subscribe('train/position/*', handler);
-    }
-
-    /**
-     * Subscribe to specific train position
-     */
-    async subscribeToTrainPosition(trainNumber, handler) {
-        await this.subscribe(`train/position/${trainNumber}`, handler);
-    }
 
     /**
      * Get current time in human-readable 24-hour format

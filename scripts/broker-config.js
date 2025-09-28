@@ -34,7 +34,7 @@ const BROKER_CONFIG = {
 // Environment-specific configurations
 const ENVIRONMENT_CONFIGS = {
     development: {
-        url: 'ws://localhost1:8008',
+        url: 'ws://localhost:8008',
         vpnName: 'default',
         userName: 'default',
         password: 'default'

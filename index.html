@@ -19,7 +19,7 @@
         </div>
         
         <!-- Floating toggle button for collapsed sidebar -->
-        <button id="floatingToggleBtn" class="floating-toggle-btn" title="Train Monitoring System">🚂</button>
+        <button id="floatingRightToggleBtn" class="floating-toggle-btn" title="Train Monitoring System">🚂</button>
         
         <!-- Events floating button in bottom left -->
         <button id="eventsFloatingBtn" class="events-floating-btn" title="Events">
@@ -31,7 +31,7 @@
             <img src="assets/images/alertcontrol.png" alt="Alert Controls" />
         </button>
         
-        <div class="control-panel">
+        <div id="rightSidebar" class="right-sidebar">
         <div class="header">
             <div class="header-content">
                 <div class="header-text">
@@ -39,7 +39,7 @@
                 </div>
                 <div class="header-buttons">
                     <button id="aboutBtn" class="about-btn" title="About">ℹ️</button>
-                    <button id="toggleSidebarBtn" class="toggle-btn" title="Toggle Sidebar">🚂</button>
+                    <button id="toggleRightSidebarBtn" class="toggle-btn" title="Toggle Right Sidebar">🚂</button>
                 </div>
             </div>
         </div>
@@ -146,18 +146,18 @@
 
         </div>
         
-        <!-- Right sidebar for events -->
-        <div id="leftSidebar" class="right-sidebar">
-            <div class="right-sidebar-header">
+        <!-- Left sidebar for events -->
+        <div id="leftSidebar" class="left-sidebar">
+            <div class="left-sidebar-header">
                 <h2>Events</h2>
                 <div class="event-controls">
                     <button id="clearEventsBtn" class="clear-events-btn" title="Clear All Events">🗑️</button>
-                    <button id="closeRightSidebarBtn" class="close-right-sidebar-btn" title="Close Events">
+                    <button id="closeLeftSidebarBtn" class="close-left-sidebar-btn" title="Close Left Sidebar">
                         <img src="assets/images/events.png" alt="Events" />
                     </button>
                 </div>
             </div>
-            <div class="right-sidebar-content">
+            <div class="left-sidebar-content">
                 <div class="event-filters">
                     <button class="filter-btn active" data-filter="all">All</button>
                     <button class="filter-btn" data-filter="train">🚂 Train</button>

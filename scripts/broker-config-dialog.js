@@ -43,7 +43,13 @@ class BrokerConfigDialog {
         const brokerTypeRadios = this.form.querySelectorAll('input[name="brokerType"]');
         brokerTypeRadios.forEach(radio => {
             radio.addEventListener('change', (e) => {
-                this.toggleSolaceFields(e.target.value === 'solace');
+                const isSolace = e.target.value === 'solace';
+                this.toggleSolaceFields(isSolace);
+                
+                // If switching to Solace, reload the configuration
+                if (isSolace) {
+                    this.loadSolaceConfiguration();
+                }
             });
         });
 
@@ -97,12 +103,36 @@ class BrokerConfigDialog {
                 this.toggleSolaceFields(currentBrokerType === 'solace');
             }
 
-            // Load Solace configuration if available
-            if (currentConfig && currentBrokerType === 'solace') {
-                document.getElementById('broker-url').value = currentConfig.url || '';
-                document.getElementById('broker-vpn').value = currentConfig.vpnName || '';
-                document.getElementById('broker-username').value = currentConfig.userName || '';
-                document.getElementById('broker-password').value = currentConfig.password || '';
+            // Load Solace configuration - check both current config and stored config
+            let solaceConfig = null;
+            
+            // First, try to get stored Solace configuration
+            const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
+            if (storedConfig && storedConfig.brokerType === 'solace' && storedConfig.config) {
+                solaceConfig = storedConfig.config;
+                console.log('📋 Loading stored Solace configuration');
+            } else if (currentConfig) {
+                // Fallback to current/default configuration
+                solaceConfig = currentConfig;
+                console.log('📋 Loading default Solace configuration');
+            }
+            
+            // Load Solace configuration into form fields
+            if (solaceConfig) {
+                document.getElementById('broker-url').value = solaceConfig.url || '';
+                document.getElementById('broker-vpn').value = solaceConfig.vpnName || '';
+                document.getElementById('broker-username').value = solaceConfig.userName || '';
+                document.getElementById('broker-password').value = solaceConfig.password || '';
+            } else {
+                // Load default values if no stored config
+                const defaultConfig = window.BrokerConfig ? window.BrokerConfig.getBrokerConfig('development') : null;
+                if (defaultConfig) {
+                    document.getElementById('broker-url').value = defaultConfig.url || '';
+                    document.getElementById('broker-vpn').value = defaultConfig.vpnName || '';
+                    document.getElementById('broker-username').value = defaultConfig.userName || '';
+                    document.getElementById('broker-password').value = defaultConfig.password || '';
+                    console.log('📋 Loading default Solace configuration values');
+                }
             }
         } catch (error) {
             console.error('❌ Error loading current broker configuration:', error);
@@ -122,6 +152,40 @@ class BrokerConfigDialog {
             this.solaceFields.querySelectorAll('input').forEach(input => {
                 input.required = false;
             });
+        }
+    }
+
+    /**
+     * Load Solace configuration into form fields
+     */
+    loadSolaceConfiguration() {
+        try {
+            let solaceConfig = null;
+            
+            // First, try to get stored Solace configuration
+            const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
+            if (storedConfig && storedConfig.brokerType === 'solace' && storedConfig.config) {
+                solaceConfig = storedConfig.config;
+                console.log('📋 Loading stored Solace configuration for form');
+            } else {
+                // Fallback to default Solace configuration
+                solaceConfig = window.BrokerConfig ? window.BrokerConfig.getBrokerConfig('development') : null;
+                console.log('📋 Loading default Solace configuration for form');
+            }
+            
+            // Load configuration into form fields
+            if (solaceConfig) {
+                document.getElementById('broker-url').value = solaceConfig.url || '';
+                document.getElementById('broker-vpn').value = solaceConfig.vpnName || '';
+                document.getElementById('broker-username').value = solaceConfig.userName || '';
+                document.getElementById('broker-password').value = solaceConfig.password || '';
+                
+                console.log('✅ Solace configuration loaded into form fields');
+            } else {
+                console.warn('⚠️ No Solace configuration available to load');
+            }
+        } catch (error) {
+            console.error('❌ Error loading Solace configuration:', error);
         }
     }
 

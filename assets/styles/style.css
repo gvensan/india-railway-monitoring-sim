@@ -17,13 +17,12 @@ body {
     transition: margin-left 0.3s ease, height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.container.sidebar-open {
-    margin-left: 400px;
-}
+/* Map container positioning is handled by JavaScript transforms */
 
 .map-container {
     flex: 1;
     position: relative;
+    transition: transform 0.3s ease;
 }
 
 #map {
@@ -31,48 +30,45 @@ body {
     width: 100%;
 }
 
-.control-panel {
-    width: 0;
+.right-sidebar {
+    position: fixed;
+    top: 0;
+    right: -400px !important;
+    width: 400px;
+    height: 100vh;
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
-    padding: 0;
+    padding: 10px;
     overflow-y: auto;
     box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
-    transition: width 0.3s ease;
+    transition: right 0.3s ease;
+    z-index: 1002;
 }
 
-.control-panel.expanded {
-    width: 350px;
-    padding: 10px;
+/* Ensure the sidebar is hidden by default */
+.right-sidebar:not(.open) {
+    right: -400px !important;
 }
 
-.control-panel.collapsed {
-    width: 0;
-    padding: 0;
-    overflow: hidden;
+.right-sidebar.open {
+    right: 0 !important;
+    background: rgba(255, 255, 255, 0.98) !important;
 }
 
-.control-panel .control-section {
-    display: none;
-}
 
-.control-panel .header-text {
-    display: none;
-}
-
-.control-panel .header {
-    display: none;
-}
-
-.control-panel.expanded .control-section {
+.right-sidebar .control-section {
     display: block;
 }
 
-.control-panel.expanded .header-text {
+.right-sidebar .header-text {
     display: block;
 }
 
-.control-panel.expanded .header {
+.right-sidebar .header {
+    display: block;
+}
+
+.right-sidebar .control-sections-container {
     display: block;
 }
 
@@ -133,7 +129,7 @@ body {
     background: #2980b9;
 }
 
-.control-panel.collapsed .toggle-btn {
+.right-sidebar:not(.open) .toggle-btn {
     display: none;
 }
 
@@ -156,6 +152,11 @@ body {
     justify-content: center;
     transition: all 0.3s ease;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Hide floating button when right sidebar is open */
+.container.right-sidebar-open .floating-toggle-btn {
+    display: none !important;
 }
 
 .floating-toggle-btn:hover {
@@ -217,8 +218,8 @@ body {
     filter: brightness(1.4) contrast(1.2);
 }
 
-/* Hide events button when events panel is open (higher priority) */
-.container.sidebar-open .events-floating-btn {
+/* Hide events button when left sidebar is open (higher priority) */
+.container.left-sidebar-open .events-floating-btn {
     display: none;
 }
 
@@ -228,10 +229,10 @@ body {
 }
 
 /* Left sidebar for events */
-.right-sidebar {
+.left-sidebar {
     position: fixed;
     top: 0;
-    left: -400px;
+    left: -400px !important;
     width: 400px;
     height: 100vh;
     background: rgba(255, 255, 255, 0.95);
@@ -244,11 +245,16 @@ body {
     display: block;
 }
 
-.right-sidebar.open {
-    left: 0;
+/* Ensure the left sidebar is hidden by default */
+.left-sidebar:not(.open) {
+    left: -400px !important;
 }
 
-.right-sidebar-header {
+.left-sidebar.open {
+    left: 0 !important;
+}
+
+.left-sidebar-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -282,13 +288,13 @@ body {
     background: #34495e;
 }
 
-.right-sidebar-header h2 {
+.left-sidebar-header h2 {
     color: #333;
     font-size: 18px;
     margin: 0;
 }
 
-.close-right-sidebar-btn {
+.close-left-sidebar-btn {
     background: #2c3e50;
     color: white;
     border: none;
@@ -303,17 +309,17 @@ body {
     transition: background-color 0.3s ease;
 }
 
-.close-right-sidebar-btn:hover {
+.close-left-sidebar-btn:hover {
     background: #34495e;
 }
 
-.close-right-sidebar-btn img {
+.close-left-sidebar-btn img {
     width: 16px;
     height: 16px;
     filter: brightness(1.2) contrast(1.1);
 }
 
-.right-sidebar-content {
+.left-sidebar-content {
     color: #666;
     padding: 0;
 }
@@ -566,39 +572,39 @@ body {
 }
 
 /* Responsive behavior when alert panel is open */
-/* Make control panel content scrollable and adjust height */
-.container.alert-panel-open .control-panel.expanded {
+/* Make right sidebar content scrollable and adjust height */
+.container.alert-panel-open .right-sidebar.open {
     height: calc(100vh - 160px);
     display: flex;
     flex-direction: column;
     overflow: hidden; /* Prevent the entire panel from scrolling */
 }
 
-.container.alert-panel-open .control-panel .header {
+.container.alert-panel-open .right-sidebar .header {
     flex-shrink: 0; /* Keep header fixed size */
 }
 
 /* Make the control sections container scrollable */
-.container.alert-panel-open .control-panel .control-sections-container {
+.container.alert-panel-open .right-sidebar .control-sections-container {
     flex: 1; /* Take remaining space after header */
     overflow-y: auto; /* Make this container scrollable */
     padding: 0; /* Remove any default padding */
 }
 
 /* Reset individual control section styling */
-.container.alert-panel-open .control-panel .control-section {
+.container.alert-panel-open .right-sidebar .control-section {
     /* Reset any individual styling */
     flex: none;
     overflow: visible;
     max-height: none;
 }
 
-/* Make events panel content scrollable and adjust height */
-.container.alert-panel-open .right-sidebar.open {
+/* Make left sidebar content scrollable and adjust height */
+.container.alert-panel-open .left-sidebar.open {
     height: calc(100vh - 160px);
 }
 
-.container.alert-panel-open .right-sidebar-content {
+.container.alert-panel-open .left-sidebar-content {
     max-height: calc(100vh - 240px); /* Account for header and padding */
     overflow-y: auto;
 }
@@ -1371,10 +1377,18 @@ body {
         flex-direction: column;
     }
     
-    .control-panel {
-        width: 100%;
+    .right-sidebar {
+        position: fixed;
+        top: 0;
+        right: -100% !important;
+        width: 100% !important;
         height: 40vh;
         order: 2;
+        z-index: 1000;
+    }
+    
+    .right-sidebar.open {
+        right: 0 !important;
     }
     
     .map-container {
@@ -1798,7 +1812,7 @@ body {
 }
 
 .btn {
-    padding: 10px 20px;
+    /* padding: 10px 20px; */
     border: none;
     border-radius: 4px;
     cursor: pointer;
@@ -1844,6 +1858,67 @@ body {
     white-space: nowrap !important;
     opacity: 0.9 !important;
     transition: opacity 0.2s ease !important;
+}
+
+/* Horizontal zoom control panel at bottom center */
+.leaflet-control-zoom {
+    position: fixed !important;
+    bottom: 20px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 1000 !important;
+    display: flex !important;
+    flex-direction: row !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+    border: 2px solid #ddd !important;
+    border-radius: 25px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+    overflow: hidden !important;
+    transition: all 0.3s ease !important;
+}
+
+/* Individual zoom buttons */
+.leaflet-control-zoom a {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    /* width: 40px !important; */
+    /* height: 40px !important; */
+    text-decoration: none !important;
+    color: #333 !important;
+    font-size: 18px !important;
+    font-weight: bold !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    transition: background-color 0.2s ease !important;
+    cursor: pointer !important;
+}
+
+/* Hover effects for zoom buttons */
+.leaflet-control-zoom a:hover {
+    background: rgba(52, 152, 219, 0.1) !important;
+    color: #3498db !important;
+}
+
+/* Active state for zoom buttons */
+.leaflet-control-zoom a:active {
+    background: rgba(52, 152, 219, 0.2) !important;
+    color: #2980b9 !important;
+}
+
+/* Remove default Leaflet zoom button styling */
+.leaflet-control-zoom a.leaflet-control-zoom-in,
+.leaflet-control-zoom a.leaflet-control-zoom-out {
+    border: none !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+/* Add separator between zoom in and zoom out */
+.leaflet-control-zoom a.leaflet-control-zoom-in {
+    border-right: 1px solid #ddd !important;
 }
 
 .train-tooltip::before {
