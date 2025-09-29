@@ -2,6 +2,10 @@
 
 A comprehensive real-time train monitoring and simulation system for Indian Railways, featuring interactive maps, multi-train tracking, alert management, and event monitoring capabilities.
 
+## ⚠️ DISCLAIMER
+
+This is a **simulation system** for demonstration purposes only. It does not use real-time data or connect to actual railway systems. All train information, schedules, and movements are simulated using sample data. For real train information, please refer to official Indian Railways sources.
+
 ## 🎯 What is this?
 
 This is a web-based train monitoring system that simulates real Indian Railways operations. You can:
