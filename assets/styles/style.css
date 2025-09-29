@@ -90,6 +90,23 @@ body {
     align-items: center;
 }
 
+.tour-btn-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 20px;
+    color: white;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.tour-btn-header:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
 .about-btn {
     background: none;
     border: none;
@@ -1488,7 +1505,10 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 10000;
+    z-index: 10004;
+    pointer-events: auto;
+    padding: 20px;
+    box-sizing: border-box;
 }
 
 .about-dialog {
@@ -1496,10 +1516,12 @@ body {
     border-radius: 12px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
     max-width: 600px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
+    width: 100%;
+    height: 80vh;
     animation: slideIn 0.3s ease-out;
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 .about-dialog-header {
@@ -1511,6 +1533,7 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border-radius: 12px 12px 0 0;
+    flex-shrink: 0;
 }
 
 .about-dialog-header h3 {
@@ -1541,6 +1564,11 @@ body {
 
 .about-dialog-content {
     padding: 25px;
+    overflow-y: scroll;
+    flex: 1;
+    height: 0;
+    position: relative;
+    z-index: 1;
 }
 
 .about-section {
@@ -1891,6 +1919,7 @@ body {
     background: transparent !important;
     border: none !important;
     border-radius: 0 !important;
+    border-right: 1px solid #ddd !important;
     transition: background-color 0.2s ease !important;
     cursor: pointer !important;
 }

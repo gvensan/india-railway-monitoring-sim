@@ -11,6 +11,9 @@
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="assets/styles/style.css" />
+    
+    <!-- Product Tour CSS -->
+    <link rel="stylesheet" href="assets/styles/tour.css" />
 </head>
 <body>
     <div class="container">
@@ -222,6 +225,9 @@
     <!-- Train Monitoring JavaScript -->
     <script src="scripts/train-monitoring.js"></script>
     
+    <!-- Product Tour JavaScript -->
+    <script src="scripts/product-tour.js"></script>
+    
     <!-- Test Dual Broker Implementation (removed for production) -->
     
     <!-- About Dialog -->
@@ -232,67 +238,100 @@
                 <button class="about-dialog-close" onclick="closeAboutDialog()">&times;</button>
             </div>
             <div class="about-dialog-content">
-                <div class="about-section">
-                    <h4>🎯 Overview</h4>
-                    <p>This is a comprehensive real-time train monitoring and simulation system for Indian Railways, featuring interactive maps, multi-train tracking, alert management, and event monitoring capabilities.</p>
-                </div>
-                
-                <div class="about-section">
-                    <h4>🆕 Recent Updates</h4>
-                    <ul>
-                        <li><strong>Enhanced Alert Management:</strong> Improved alert tracking with proper unserved alert handling at destination stations</li>
-                        <li><strong>Dual Broker Support:</strong> Primary Solace PubSub+ integration with intelligent fallback to in-memory broker</li>
-                        <li><strong>Advanced Event Processing:</strong> Comprehensive event lifecycle management with detailed logging</li>
-                        <li><strong>Improved UI/UX:</strong> Enhanced tooltips, better visual indicators, and responsive design</li>
-                        <li><strong>Data Validation:</strong> Fixed station coordinate data and improved data integrity</li>
-                        <li><strong>Performance Optimizations:</strong> Better memory management and reduced console noise</li>
-                    </ul>
-                </div>
-                
-                <div class="about-section">
-                    <h4>🔧 Key Features</h4>
-                    <ul>
-                        <li><strong>Real-time Monitoring:</strong> Live train tracking with interactive maps</li>
-                        <li><strong>Alert Management:</strong> Complete alert lifecycle from raised to served/missed/unserved</li>
-                        <li><strong>Event Streaming:</strong> Comprehensive event logging and filtering</li>
-                        <li><strong>Multi-train Support:</strong> Monitor multiple trains simultaneously</li>
-                        <li><strong>Broker Integration:</strong> Solace PubSub+ with in-memory fallback</li>
-                        <li><strong>Responsive Design:</strong> Works on desktop, tablet, and mobile devices</li>
-                    </ul>
-                </div>
-                
-                <div class="about-section">
-                    <h4>🛠️ Technical Stack</h4>
-                    <ul>
-                        <li><strong>Frontend:</strong> HTML5, CSS3, JavaScript ES6+</li>
-                        <li><strong>Mapping:</strong> Leaflet.js with OpenStreetMap</li>
-                        <li><strong>Messaging:</strong> Solace PubSub+ with in-memory broker fallback</li>
-                        <li><strong>Data:</strong> Indian Railways train schedules and station coordinates</li>
-                    </ul>
-                </div>
-                
-                <div class="about-section">
-                    <h4>📊 System Status</h4>
-                    <div class="status-indicators">
-                        <div class="status-item">
-                            <span class="status-label">Broker Connection:</span>
-                            <span id="about-broker-status" class="status-value">Checking...</span>
-                        </div>
-                        <div class="status-item">
-                            <span class="status-label">Event Manager:</span>
-                            <span id="about-event-status" class="status-value">Active</span>
-                        </div>
-                        <div class="status-item">
-                            <span class="status-label">Train Monitor:</span>
-                            <span id="about-train-status" class="status-value">Ready</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="about-footer">
-                    <p><strong>Version:</strong> 2.0.0 | <strong>Last Updated:</strong> September 2025</p>
-                    <p>Built with ❤️ for Indian Railways monitoring and simulation</p>
-                </div>
+              <div class="about-section">
+                  <h4>🎯 Overview</h4>
+                  <p>This is a comprehensive real-time train monitoring and simulation system for Indian Railways, featuring interactive maps, multi-train tracking, alert management, and event monitoring capabilities.</p>
+              </div>
+              
+              <div class="about-section">
+                  <h4>🆕 Recent Updates</h4>
+                  <ul>
+                      <li><strong>Interactive Product Tour:</strong> New guided walkthrough to help users discover all features</li>
+                      <li><strong>Enhanced Alert Management:</strong> Improved alert tracking with proper unserved alert handling at destination stations</li>
+                      <li><strong>Dual Broker Support:</strong> Primary Solace PubSub+ integration with intelligent fallback to in-memory broker</li>
+                      <li><strong>Advanced Event Processing:</strong> Comprehensive event lifecycle management with detailed logging</li>
+                      <li><strong>Improved UI/UX:</strong> Enhanced tooltips, better visual indicators, and responsive design</li>
+                      <li><strong>Data Validation:</strong> Fixed station coordinate data and improved data integrity</li>
+                      <li><strong>Performance Optimizations:</strong> Better memory management and reduced console noise</li>
+                  </ul>
+              </div>
+              
+              <div class="about-section">
+                  <h4>🔧 Key Features</h4>
+                  <ul>
+                      <li><strong>Interactive Product Tour:</strong> Guided walkthrough of all features and capabilities</li>
+                      <li><strong>Real-time Monitoring:</strong> Live train tracking with interactive maps</li>
+                      <li><strong>Alert Management:</strong> Complete alert lifecycle from raised to served/missed/unserved</li>
+                      <li><strong>Event Streaming:</strong> Comprehensive event logging and filtering</li>
+                      <li><strong>Multi-train Support:</strong> Monitor multiple trains simultaneously</li>
+                      <li><strong>Broker Integration:</strong> Solace PubSub+ with in-memory fallback</li>
+                      <li><strong>Responsive Design:</strong> Works on desktop, tablet, and mobile devices</li>
+                  </ul>
+              </div>
+              
+              <div class="about-section">
+                  <h4>🛠️ Technical Architecture</h4>
+                  <ul>
+                      <li><strong>Frontend:</strong> HTML5, CSS3, JavaScript ES6+ with modular design</li>
+                      <li><strong>Mapping:</strong> Leaflet.js with OpenStreetMap and Thunderforest transport layer</li>
+                      <li><strong>Messaging:</strong> Dual broker system - Solace PubSub+ primary with in-memory fallback</li>
+                      <li><strong>Data Sources:</strong> Indian Railways schedules, OpenStreetMap infrastructure, validated station coordinates</li>
+                      <li><strong>Event System:</strong> Real-time event streaming with comprehensive lifecycle management</li>
+                      <li><strong>Alert Management:</strong> Complete alert lifecycle from raised to served/missed/unserved</li>
+                      <li><strong>Performance:</strong> Coordinate caching, efficient rendering, memory management</li>
+                  </ul>
+              </div>
+              
+              <div class="about-section">
+                  <h4>🔧 System Components</h4>
+                  <ul>
+                      <li><strong>Train Monitor:</strong> Core simulation engine with physics and route management</li>
+                      <li><strong>Event Manager:</strong> Real-time event processing and distribution</li>
+                      <li><strong>Broker Integration:</strong> Solace PubSub+ with intelligent fallback mechanisms</li>
+                      <li><strong>Alert System:</strong> Multi-type alert management with visual indicators</li>
+                      <li><strong>Map Engine:</strong> Interactive mapping with railway infrastructure overlay</li>
+                      <li><strong>Product Tour:</strong> Interactive guided walkthrough system</li>
+                  </ul>
+              </div>
+              
+              <div class="about-section">
+                  <h4>📊 Data & Performance</h4>
+                  <ul>
+                      <li><strong>Train Database:</strong> 300+ real Indian Railways trains with complete route data</li>
+                      <li><strong>Station Coordinates:</strong> Validated geographical positions for all stations</li>
+                      <li><strong>Real-time Updates:</strong> Live train tracking with 60fps animations</li>
+                      <li><strong>Memory Management:</strong> Limited event history with auto-cleanup (100 events max)</li>
+                      <li><strong>Connection Handling:</strong> Smart retry logic and connection status monitoring</li>
+                      <li><strong>Responsive Design:</strong> Works on desktop, tablet, and mobile devices</li>
+                  </ul>
+              </div>
+              
+              <div class="about-section">
+                  <h4>📊 System Status</h4>
+                  <div class="status-indicators">
+                      <div class="status-item">
+                          <span class="status-label">Broker Connection:</span>
+                          <span id="about-broker-status" class="status-value">Checking...</span>
+                      </div>
+                      <div class="status-item">
+                          <span class="status-label">Event Manager:</span>
+                          <span id="about-event-status" class="status-value">Active</span>
+                      </div>
+                      <div class="status-item">
+                          <span class="status-label">Train Monitor:</span>
+                          <span id="about-train-status" class="status-value">Ready</span>
+                      </div>
+                  </div>
+              </div>
+              
+              <div class="about-footer">
+                  <p><strong>Version:</strong> 2.0.0 | <strong>Last Updated:</strong> September 2025</p>
+                  <p>Built with ❤️ for Indian Railways monitoring and simulation</p>
+                  <p style="margin-top: 12px; padding: 8px; background: rgba(102, 126, 234, 0.1); border-radius: 6px; font-size: 13px;">
+                      <strong>🎯 New to the system?</strong> Click the tour button in the map's zoom controls (between + and -) to take an interactive walkthrough of all features!
+                  </p>
+              </div>
+            
             </div>
         </div>
     </div>

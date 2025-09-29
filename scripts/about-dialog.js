@@ -10,7 +10,11 @@ function openAboutDialog() {
     const dialog = document.getElementById('about-dialog');
     if (dialog) {
         dialog.style.display = 'flex';
+        dialog.style.pointerEvents = 'auto';
         updateAboutStatus();
+        
+        // Focus the dialog for keyboard navigation
+        dialog.focus();
     }
 }
 
@@ -65,10 +69,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const aboutDialog = document.getElementById('about-dialog');
     if (aboutDialog) {
         aboutDialog.addEventListener('click', (e) => {
+            // Close if clicking on the overlay (not the dialog content)
             if (e.target === aboutDialog) {
                 closeAboutDialog();
             }
         });
+        
+        // Prevent dialog content clicks from bubbling to overlay
+        const dialogContent = aboutDialog.querySelector('.about-dialog');
+        if (dialogContent) {
+            dialogContent.addEventListener('click', (e) => {
+                e.stopPropagation();
+            });
+        }
+        
+        // Ensure scroll events work on the content area
+        const contentArea = aboutDialog.querySelector('.about-dialog-content');
+        if (contentArea) {
+            contentArea.addEventListener('wheel', (e) => {
+                e.stopPropagation();
+            });
+            contentArea.addEventListener('scroll', (e) => {
+                e.stopPropagation();
+            });
+        }
     }
     
     // Close dialog with Escape key
