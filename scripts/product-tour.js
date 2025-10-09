@@ -34,9 +34,18 @@ class ProductTour {
     }
     
     createTourElements() {
-        // Create overlay
+        // Don't create elements here - they will be created dynamically when tour starts
+        // This prevents any interference with marker interactions when tour is not active
+        console.log('🔧 Tour elements will be created dynamically when tour starts');
+    }
+    
+    createDynamicTourElements() {
+        console.log('🔧 Creating tour elements dynamically...');
+        
+        // Create overlay only when tour starts
         this.overlay = document.createElement('div');
         this.overlay.className = 'tour-overlay';
+        this.overlay.style.pointerEvents = 'auto'; // Enable pointer events only when tour is active
         document.body.appendChild(this.overlay);
         
         // Create highlight element
@@ -86,6 +95,38 @@ class ProductTour {
                 this.completeTour();
             });
         }
+        
+        // Set up event listeners for the dynamically created elements
+        this.setupDynamicEventListeners();
+        
+        console.log('✅ Tour elements created dynamically');
+    }
+    
+    removeDynamicTourElements() {
+        console.log('🔧 Removing tour elements dynamically...');
+        
+        // Remove overlay
+        if (this.overlay && this.overlay.parentNode) {
+            this.overlay.parentNode.removeChild(this.overlay);
+            this.overlay = null;
+        }
+        
+        // Remove tooltip
+        if (this.tooltip && this.tooltip.parentNode) {
+            this.tooltip.parentNode.removeChild(this.tooltip);
+            this.tooltip = null;
+        }
+        
+        // Remove completion dialog
+        if (this.completionDialog && this.completionDialog.parentNode) {
+            this.completionDialog.parentNode.removeChild(this.completionDialog);
+            this.completionDialog = null;
+        }
+        
+        // Reset highlight
+        this.highlight = null;
+        
+        console.log('✅ Tour elements removed dynamically');
     }
     
     createTriggerButton() {
@@ -327,41 +368,10 @@ class ProductTour {
     }
     
     setupEventListeners() {
-        // Close tour on overlay click (but not on tooltip clicks)
-        this.overlay.addEventListener('click', (e) => {
-            if (e.target === this.overlay) {
-                this.close();
-            }
-        });
+        // Event listeners will be set up when tour elements are created dynamically
+        // This prevents errors when elements don't exist initially
         
-        // Handle tooltip clicks (buttons and prevent bubbling)
-        this.tooltip.addEventListener('click', (e) => {
-            // Check if clicked element is a button or inside a button
-            const button = e.target.closest('.tour-btn');
-            if (button) {
-                const action = button.getAttribute('data-action');
-                
-                e.preventDefault();
-                e.stopPropagation();
-                
-                switch(action) {
-                    case 'next':
-                        this.next();
-                        break;
-                    case 'previous':
-                        this.previous();
-                        break;
-                    case 'skip':
-                        this.close();
-                        break;
-                }
-            } else {
-                // If not a button, just prevent bubbling to overlay
-                e.stopPropagation();
-            }
-        });
-        
-        // Keyboard navigation
+        // Keyboard navigation (global)
         document.addEventListener('keydown', (e) => {
             if (!this.isActive) return;
             
@@ -390,11 +400,59 @@ class ProductTour {
         }
     }
     
+    setupDynamicEventListeners() {
+        // Set up event listeners for dynamically created elements
+        if (this.overlay) {
+            // Close tour on overlay click (but not on tooltip clicks)
+            this.overlay.addEventListener('click', (e) => {
+                if (e.target === this.overlay) {
+                    this.close();
+                }
+            });
+        }
+        
+        if (this.tooltip) {
+            // Handle tooltip clicks (buttons and prevent bubbling)
+            this.tooltip.addEventListener('click', (e) => {
+                // Check if clicked element is a button or inside a button
+                const button = e.target.closest('.tour-btn');
+                if (button) {
+                    const action = button.getAttribute('data-action');
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    switch(action) {
+                        case 'next':
+                            this.next();
+                            break;
+                        case 'previous':
+                            this.previous();
+                            break;
+                        case 'skip':
+                            this.close();
+                            break;
+                    }
+                } else {
+                    // If not a button, just prevent bubbling to overlay
+                    e.stopPropagation();
+                }
+            });
+        }
+    }
+    
     start() {
         if (this.isActive) return;
         
+        console.log('🔧 Starting tour - creating elements dynamically...');
+        
         this.isActive = true;
         this.currentStep = 0;
+        
+        // Create tour elements dynamically
+        this.createDynamicTourElements();
+        
+        // Activate overlay
         this.overlay.classList.add('active');
         this.triggerButton.classList.add('hidden');
         
@@ -403,22 +461,29 @@ class ProductTour {
         
         this.showStep(0);
         this.saveTourState('started');
+        
+        console.log('✅ Tour started with dynamic elements');
     }
     
     close() {
         if (!this.isActive) return;
         
+        console.log('🔧 Closing tour - removing elements dynamically...');
+        
         this.isActive = false;
-        this.overlay.classList.remove('active');
-        this.tooltip.classList.remove('active');
-        this.highlight.style.display = 'none';
-        this.completionDialog.classList.remove('active');
-        this.triggerButton.classList.remove('hidden');
         
         // Clean up any waiting states
         this.clearWaitingStates();
         
+        // Remove tour elements completely from DOM
+        this.removeDynamicTourElements();
+        
+        // Show trigger button again
+        this.triggerButton.classList.remove('hidden');
+        
         this.saveTourState('completed');
+        
+        console.log('✅ Tour closed and elements removed from DOM');
     }
     
     completeTour() {

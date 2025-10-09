@@ -95,10 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     
-    // Close dialog with Escape key
+    // Close dialog with Escape key (only when dialog is open)
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            closeAboutDialog();
+            const aboutDialog = document.getElementById('about-dialog');
+            if (aboutDialog && aboutDialog.style.display !== 'none') {
+                closeAboutDialog();
+            }
         }
     });
     

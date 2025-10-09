@@ -1,4 +1,4 @@
-// Train Monitoring POC
+// Train Monitoring POC - Updated to fix updateDisplay method calls
 class TrainMonitor {
     constructor() {
         // Prevent multiple instances
@@ -23,6 +23,11 @@ class TrainMonitor {
         this.isRunning = false;
         this.isPaused = false;
         this.speed = 1;
+        this.isRealtimeMode = false;
+        this.timeControlsVisible = false;
+        this.timeUpdateInterval = null;
+        this.currentDisplayTime = null;
+        this.timeIncrementMinutes = 1;
         
         // Train processing state
         this.isProcessingTrain = false;
@@ -55,6 +60,28 @@ class TrainMonitor {
         // Solace integration
         this.solaceEnabled = false;
         this.solaceConnected = false;
+        this.solaceIntegration = new SolaceIntegration(this);
+        
+        // Tooltip system
+        this.tooltipSystem = new TooltipSystem(this);
+        
+        // Multi-train manager
+        this.multiTrainManager = new MultiTrainManager(this);
+        
+        // Real-time monitor
+        this.realtimeMonitor = new RealtimeMonitor(this);
+        
+        // Alert system
+        this.alertSystem = new AlertSystem(this);
+        
+        // Train simulation engine
+        this.trainSimulation = new TrainSimulation(this);
+        
+        // UI controls
+        this.uiControls = new UIControls(this);
+        
+        // Train data manager
+        this.trainDataManager = new TrainDataManager(this);
         
         this.init();
     }
@@ -73,13 +100,13 @@ class TrainMonitor {
         this.initializeRightSidebar();
         
         // Initialize Solace connection (optional)
-        this.initializeSolace();
+        this.solaceIntegration.initializeSolace();
         
         // Initialize with default Mumbai-Pune route (like index-old.html)
         // this.initializeDefaultRoute();
         
         // Initialize display with default state
-        this.updateDisplay();
+        this.trainSimulation.updateDisplay();
         
         // Load available trains into dropdown
         this.loadAvailableTrains();
@@ -131,14 +158,18 @@ class TrainMonitor {
         
         this.currentLayer = 'transport'; // Transport layer is active by default
         
-        // Add event listeners for map movement to update alert flag positions
+        // Add event listeners for map movement to update alert flag positions and tooltips
         this.map.on('move', () => {
             this.updateAlertFlagPositions();
+            this.updateTooltipPositions();
         });
         
         this.map.on('zoom', () => {
             this.updateAlertFlagPositions();
+            this.updateTooltipPositions();
         });
+        
+        // Map events handled by individual markers
     }
     
     initializeDefaultRoute() {
@@ -154,6 +185,7 @@ class TrainMonitor {
         // Set default train information
         this.currentTrainNumber = '12345';
         this.currentTrainName = 'Mumbai-Thane Local';
+        this.currentTrainData = null; // Will store complete train data including coach information
         
         // Initialize simulation state
         this.currentStationIndex = 0;
@@ -162,8 +194,8 @@ class TrainMonitor {
         this.trainSpeed = 0;
         
         // Generate waypoints for the default route
-        this.waypoints = this.generateWaypoints();
-        this.totalDistance = this.calculateTotalDistance();
+        this.waypoints = this.trainDataManager.generateWaypoints();
+        this.totalDistance = this.trainDataManager.calculateTotalDistance();
         
         this.initializeTrain();
         
@@ -201,21 +233,12 @@ class TrainMonitor {
     calculateTotalDistance() {
         let total = 0;
         for (let i = 0; i < this.waypoints.length - 1; i++) {
-            total += this.calculateDistance(this.waypoints[i], this.waypoints[i + 1]);
+            total += this.calculateDistance(this.waypoints[i].lat, this.waypoints[i].lng, this.waypoints[i + 1].lat, this.waypoints[i + 1].lng);
         }
         return total;
     }
     
-    calculateDistance(point1, point2) {
-        const R = 6371; // Earth's radius in km
-        const dLat = (point2.lat - point1.lat) * Math.PI / 180;
-        const dLng = (point2.lng - point1.lng) * Math.PI / 180;
-        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-                  Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) *
-                  Math.sin(dLng/2) * Math.sin(dLng/2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-        return R * c;
-    }
+    // Removed duplicate method - using calculateDistance(lat1, lng1, lat2, lng2) instead
     
     createTrainIcon() {
         // Create train icon using the images/train.png image (no rotation)
@@ -231,7 +254,6 @@ class TrainMonitor {
     initializeTrain() {
         // Create train marker at starting position with proper train icon
         const startStation = this.stations[0];
-        console.log('🔍 Creating train marker at:', startStation);
         
         this.trainMarker = L.marker([startStation.lat, startStation.lng], {
             icon: L.divIcon({
@@ -242,52 +264,18 @@ class TrainMonitor {
             })
         }).addTo(this.map);
         
-        console.log('🔍 Train marker created:', this.trainMarker);
         
-        // Add simple mouseover tooltip
-        this.setupSimpleTooltip(this.trainMarker);
+        // Store marker type
+        this.trainMarker._markerType = 'train';
+        this.trainMarker._trainNumber = this.currentTrainNumber;
         
-        // Add test click handler to manually show tooltip
-        this.trainMarker.on('click', () => {
-            console.log('🔍 Train marker clicked - testing tooltip manually');
-            if (this.trainMarker._tooltipElement) {
-                console.log('🔍 Showing tooltip manually');
-                this.updateTooltipContent(this.trainMarker, this.trainMarker._tooltipElement);
-                const markerPoint = this.map.latLngToContainerPoint(this.trainMarker.getLatLng());
-                this.trainMarker._tooltipElement.style.left = markerPoint.x + 'px';
-                this.trainMarker._tooltipElement.style.top = markerPoint.y + 'px';
-                this.trainMarker._tooltipElement.style.opacity = '1';
-                setTimeout(() => {
-                    this.trainMarker._tooltipElement.style.opacity = '0';
-                }, 3000);
-            } else {
-                console.log('❌ No tooltip element found on marker');
-            }
-        });
+        // Add train number hint
+        this.tooltipSystem.addTrainNumberHint(this.trainMarker, this.currentTrainNumber);
         
-        this.trainMarker.bindPopup(`
-            <div style="text-align: center; font-family: 'Segoe UI', sans-serif; min-width: 200px;">
-                <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚂 Train</h4>
-                <div style="background: #f8f9fa; border-radius: 6px; padding: 8px; margin: 6px 0;">
-                    <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                        <span style="color: #6c757d;">Status:</span>
-                        <span id="popupStatus" style="color: #495057; font-weight: 600;">Stopped</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                        <span style="color: #6c757d;">Speed:</span>
-                        <span id="popupSpeed" style="color: #495057; font-weight: 600;">0 km/h</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                        <span style="color: #6c757d;">Latitude:</span>
-                        <span id="popupLat" style="color: #495057; font-weight: 600; font-family: monospace;">${this.currentPosition.lat.toFixed(6)}°</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                        <span style="color: #6c757d;">Longitude:</span>
-                        <span id="popupLng" style="color: #495057; font-weight: 600; font-family: monospace;">${this.currentPosition.lng.toFixed(6)}°</span>
-                    </div>
-                </div>
-            </div>
-        `);
+        
+        // Add simple click tooltip
+        this.tooltipSystem.setupClickTooltip(this.trainMarker);
+        
         
         // Initialize train trail
         this.trainTrail = L.polyline([], {
@@ -311,12 +299,12 @@ class TrainMonitor {
         if (pauseBtn) pauseBtn.addEventListener('click', () => this.pause());
         if (stopBtn) stopBtn.addEventListener('click', () => this.stop());
         if (toggleLayersBtn) toggleLayersBtn.addEventListener('click', () => this.toggleLayers());
-        if (showTrainBtn) showTrainBtn.addEventListener('click', () => this.showTrain());
+        if (showTrainBtn) showTrainBtn.addEventListener('click', () => this.trainDataManager.showTrain());
         if (centerMapBtn) centerMapBtn.addEventListener('click', () => this.centerMap());
         if (resetBtn) resetBtn.addEventListener('click', () => {
             this.resetAll();
             // Call showTrain after reset to center the map
-            this.showTrain();
+            this.trainDataManager.showTrain();
         });
         
         // Auto-clean toggle
@@ -324,6 +312,30 @@ class TrainMonitor {
         if (autoCleanToggle) {
             autoCleanToggle.addEventListener('change', (e) => {
                 this.toggleAutoClean(e.target.checked);
+            });
+        }
+        
+        // Real-time toggle
+        const realtimeCheckbox = document.getElementById('realtimeCheckbox');
+        if (realtimeCheckbox) {
+            realtimeCheckbox.addEventListener('change', async (e) => {
+                await this.realtimeMonitor.toggleRealtime(e.target.checked);
+            });
+        }
+        
+        // Time controls
+        const timeChooserBtn = document.getElementById('timeChooserBtn');
+        if (timeChooserBtn) {
+            timeChooserBtn.addEventListener('click', async () => {
+                await this.realtimeMonitor.showTimeChooser();
+            });
+        }
+        
+        const timeIncrementInput = document.getElementById('timeIncrement');
+        if (timeIncrementInput) {
+            timeIncrementInput.addEventListener('change', (e) => {
+                this.timeIncrementMinutes = parseInt(e.target.value) || 0;
+                this.realtimeMonitor.updateTimeIncrement();
             });
         }
         
@@ -338,7 +350,7 @@ class TrainMonitor {
         if (toggleRightSidebarBtn) {
             toggleRightSidebarBtn.addEventListener('click', () => {
                 console.log('🚂 Toggle right sidebar button clicked!');
-                this.toggleRightSidebar();
+                this.uiControls.toggleRightSidebar();
             });
             console.log('🚂 Toggle right sidebar button event listener added');
         } else {
@@ -348,7 +360,7 @@ class TrainMonitor {
         if (floatingRightToggleBtn) {
             floatingRightToggleBtn.addEventListener('click', () => {
                 console.log('🚂 Floating right toggle button clicked!');
-                this.toggleRightSidebar();
+                this.uiControls.toggleRightSidebar();
             });
             console.log('🚂 Floating right toggle button event listener added');
         } else {
@@ -366,7 +378,7 @@ class TrainMonitor {
         if (eventsFloatingBtn) {
             eventsFloatingBtn.addEventListener('click', () => {
                 console.log('📋 Events floating button clicked!');
-                this.toggleLeftSidebar();
+                this.uiControls.toggleLeftSidebar();
             });
             console.log('📋 Events floating button event listener added');
         } else {
@@ -376,7 +388,7 @@ class TrainMonitor {
         if (closeLeftSidebarBtn) {
             closeLeftSidebarBtn.addEventListener('click', () => {
                 console.log('📋 Close left sidebar button clicked!');
-                this.closeLeftSidebar();
+                this.uiControls.closeLeftSidebar();
             });
             console.log('📋 Close left sidebar button event listener added');
         } else {
@@ -386,25 +398,25 @@ class TrainMonitor {
         // Alert panel toggle
         const alertFloatingBtn = document.getElementById('alertFloatingBtn');
         const closeAlertPanelBtn = document.getElementById('closeAlertPanelBtn');
-        if (alertFloatingBtn) alertFloatingBtn.addEventListener('click', () => this.toggleAlertPanel());
+        if (alertFloatingBtn) alertFloatingBtn.addEventListener('click', () => this.alertSystem.toggleAlertPanel());
         if (closeAlertPanelBtn) closeAlertPanelBtn.addEventListener('click', () => this.closeAlertPanel());
         
-        // Train selection dropdown
+        // Train selection with searchable select
         const selectTrainBtn = document.getElementById('selectTrainBtn');
+        const trainSearchSelect = document.getElementById('trainSearchSelect');
         const trainDropdown = document.getElementById('trainDropdown');
+        
         if (selectTrainBtn) selectTrainBtn.addEventListener('click', async () => {
-            await this.selectTrainFromDropdown();
-            // Call showTrain after train is loaded
-            this.showTrain();
+            await this.uiControls.selectTrainFromSearchableSelect();
+            // Only call showTrain for single train mode (not for "All Trains")
+            if (!this.isAllTrainsMode && this.currentTrainNumber) {
+            this.trainDataManager.showTrain();
+            }
         });
-        if (trainDropdown) {
-            trainDropdown.addEventListener('change', async (e) => {
-                if (e.target.value) {
-                    await this.selectTrainFromDropdown();
-                    // Call showTrain after train is loaded
-                    this.showTrain();
-                }
-            });
+        
+        // Initialize searchable select functionality
+        if (trainSearchSelect && trainDropdown) {
+            this.uiControls.initializeSearchableSelect();
         }
         
         
@@ -420,6 +432,8 @@ class TrainMonitor {
     }
     
     async play() {
+        try {
+        console.log('🚂 Play button clicked');
         // Prevent multiple calls if already running
         if (this.isRunning) {
             console.log('🚂 Simulation is already running');
@@ -430,12 +444,12 @@ class TrainMonitor {
             // Start simulation for all trains
             this.isRunning = true;
             this.isPaused = false;
-            this.updateStatus('All Trains Running');
+            this.uiControls.updateStatus('All Trains Running');
             
             // Publish departed origin events for all trains
             await this.publishAllTrainDepartedOriginEvents();
             
-            this.simulationLoop();
+            this.trainSimulation.simulationLoop();
         } else {
             // Ensure we have stations and train marker before starting simulation
             if (this.stations.length === 0) {
@@ -446,10 +460,17 @@ class TrainMonitor {
             // Publish train departed origin event
             await this.publishTrainDepartedOriginEvent();
             
+        console.log('🚂 Starting single train simulation');
         this.isRunning = true;
         this.isPaused = false;
-        this.updateStatus('Running');
-        this.simulationLoop();
+        this.uiControls.updateStatus('Running');
+        console.log('🚂 Calling trainSimulation.simulationLoop()');
+        this.trainSimulation.simulationLoop();
+            }
+        } catch (error) {
+            console.error('❌ Error starting simulation:', error);
+            this.isRunning = false;
+            this.uiControls.updateStatus('Error');
         }
     }
     
@@ -457,9 +478,9 @@ class TrainMonitor {
         this.isPaused = true;
         this.isRunning = false;
         if (this.isAllTrainsMode) {
-            this.updateStatus('All Trains Paused');
+            this.uiControls.updateStatus('All Trains Paused');
         } else {
-        this.updateStatus('Paused');
+        this.uiControls.updateStatus('Paused');
         }
     }
     
@@ -480,204 +501,17 @@ class TrainMonitor {
                 trainState.isAtStation = false;
                 trainState.stationStopStartTime = null;
             });
-            this.updateStatus('All Trains Stopped');
+            this.uiControls.updateStatus('All Trains Stopped');
         } else {
-        this.updateStatus('Stopped');
+        this.uiControls.updateStatus('Stopped');
         }
     }
     
-    updateStatus(status) {
-        const statusElement = document.getElementById('trainStatus');
-        const statusIndicator = document.getElementById('statusIndicator');
-        
-        if (statusElement) {
-            statusElement.textContent = status;
-        }
-        
-        if (statusIndicator) {
-            // Remove existing status classes
-            statusIndicator.classList.remove('status-running', 'status-paused', 'status-stopped');
-            
-            // Add appropriate status class
-            switch (status.toLowerCase()) {
-                case 'running':
-                    statusIndicator.classList.add('status-running');
-                    break;
-                case 'paused':
-                    statusIndicator.classList.add('status-paused');
-                    break;
-                case 'stopped':
-                default:
-                    statusIndicator.classList.add('status-stopped');
-                    break;
-            }
-        }
-    }
+    // Removed duplicate method - using uiControls.updateStatus() instead
     
-    // Update train information (comprehensive version from index-old.html)
-    updateTrainInfo() {
-        // Handle all trains mode
-        if (this.isAllTrainsMode) {
-            this.clearTrainInfo();
-            return;
-        }
-        
-        // Handle empty stations array
-        if (this.stations.length === 0) {
-            document.getElementById('train-number').textContent = '-';
-            document.getElementById('train-name').textContent = '-';
-            document.getElementById('current-station').textContent = '-';
-            document.getElementById('next-station').textContent = '-';
-            document.getElementById('train-speed').textContent = '0 km/h';
-            document.getElementById('distance').textContent = '0 km';
-            document.getElementById('distance-covered').textContent = '0 km';
-            document.getElementById('eta').textContent = '--:--';
-            document.getElementById('route-mode').textContent = 'Station-based Waypoints';
-            return;
-        }
-        
-        const currentStation = this.stations[this.currentStationIndex];
-        const nextStation = this.stations[this.currentStationIndex + 1];
-        
-        // Update train number and name (use current train data or default)
-        document.getElementById('train-number').textContent = this.currentTrainNumber || '12345';
-        document.getElementById('train-name').textContent = this.currentTrainName || 'Mumbai-Thane Local';
-        
-        // Update basic info
-        if (currentStation) {
-            document.getElementById('current-station').textContent = currentStation.name;
-        }
-        if (nextStation) {
-            document.getElementById('next-station').textContent = nextStation.name;
-        }
-        document.getElementById('train-speed').textContent = Math.round(this.currentSpeed || 0) + ' km/h';
-        
-        // Calculate distance to next station (not cumulative)
-        if (currentStation && nextStation) {
-            // Use actual railway distance from CSV data, not coordinate distance
-            const totalDistance = nextStation.distance - currentStation.distance;
-            
-            // Calculate progress between stations (0 to 1)
-            const coordinateDistance = this.calculateDistance(
-                this.currentPosition.lat, this.currentPosition.lng,
-                nextStation.lat, nextStation.lng
-            );
-            const totalCoordinateDistance = this.calculateDistance(
-                currentStation.lat, currentStation.lng,
-                nextStation.lat, nextStation.lng
-            );
-            
-            // Calculate remaining distance based on progress
-            const progress = totalCoordinateDistance > 0 ? 1 - (coordinateDistance / totalCoordinateDistance) : 0;
-            const remainingDistance = totalDistance * (1 - progress);
-            
-            document.getElementById('distance').textContent = Math.round(remainingDistance) + ' km';
-            
-            // Calculate distance covered from start to current position
-            let distanceCovered = 0;
-            if (this.currentStationIndex > 0) {
-                // Add distance from start to current station
-                distanceCovered = currentStation.distance - this.stations[0].distance;
-            }
-            // Add progress distance within current segment
-            distanceCovered += totalDistance * progress;
-            document.getElementById('distance-covered').textContent = Math.round(distanceCovered) + ' km';
-            
-            // Calculate ETA to next station (accounting for simulation speed multiplier)
-            if (this.currentSpeed > 0) {
-                // ETA = distance / speed, but divide by speed multiplier to make it faster
-                const etaMinutes = Math.round((remainingDistance / this.currentSpeed) * 60 / this.speed);
-                const hours = Math.floor(etaMinutes / 60);
-                const minutes = etaMinutes % 60;
-                document.getElementById('eta').textContent = 
-                    hours > 0 ? `${hours}:${minutes.toString().padStart(2, '0')}` : `${minutes}m`;
-            } else {
-                document.getElementById('eta').textContent = '--:--';
-            }
-        } else {
-            document.getElementById('distance').textContent = '0 km';
-            // Calculate distance covered when at final station
-            let distanceCovered = 0;
-            if (this.currentStationIndex > 0) {
-                distanceCovered = currentStation.distance - this.stations[0].distance;
-            }
-            document.getElementById('distance-covered').textContent = Math.round(distanceCovered) + ' km';
-            document.getElementById('eta').textContent = '--:--';
-        }
-        
-        // Update route mode
-        let routeMode = 'Station-based Waypoints';
-        if (this.waypoints && this.waypoints.length > 0) {
-            routeMode = 'Real Railway Tracks';
-        }
-        document.getElementById('route-mode').textContent = routeMode;
-        
-        // Update progress indicator
-        const progressText = `${this.currentStationIndex + 1}/${this.stations.length} stations`;
-        document.getElementById('station-progress').textContent = progressText;
-        
-        // Update visual progress bar
-        this.updateProgressBar();
-    }
+    // Removed duplicate method - using uiControls.updateTrainInfo() instead
     
-    /**
-     * Update the visual progress bar based on train's journey progress
-     */
-    updateProgressBar() {
-        const progressFill = document.getElementById('progressFill');
-        const progressText = document.getElementById('progressText');
-        
-        if (!progressFill || !progressText) {
-            return;
-        }
-        
-        // Calculate overall journey progress (0 to 100%)
-        let overallProgress = 0;
-        
-        if (this.stations.length > 0) {
-            // Base progress from completed stations
-            const completedStations = this.currentStationIndex;
-            const totalStations = this.stations.length - 1; // Exclude final station from total
-            
-            if (totalStations > 0) {
-                // Calculate progress within current segment
-                let segmentProgress = 0;
-                if (this.currentStationIndex < this.stations.length - 1) {
-                    const currentStation = this.stations[this.currentStationIndex];
-                    const nextStation = this.stations[this.currentStationIndex + 1];
-                    
-                    if (currentStation && nextStation) {
-                        // Calculate progress between current and next station
-                        const coordinateDistance = this.calculateDistance(
-                            this.currentPosition.lat, this.currentPosition.lng,
-                            nextStation.lat, nextStation.lng
-                        );
-                        const totalCoordinateDistance = this.calculateDistance(
-                            currentStation.lat, currentStation.lng,
-                            nextStation.lat, nextStation.lng
-                        );
-                        
-                        if (totalCoordinateDistance > 0) {
-                            segmentProgress = 1 - (coordinateDistance / totalCoordinateDistance);
-                        }
-                    }
-                }
-                
-                // Overall progress = (completed stations + segment progress) / total stations * 100
-                overallProgress = ((completedStations + segmentProgress) / totalStations) * 100;
-            } else {
-                // Single station case
-                overallProgress = 100;
-            }
-        }
-        
-        // Ensure progress is between 0 and 100
-        overallProgress = Math.max(0, Math.min(100, overallProgress));
-        
-        // Update progress bar visual
-        progressFill.style.width = `${overallProgress}%`;
-        progressText.textContent = `${Math.round(overallProgress)}%`;        
-    }
+    // Removed duplicate method - using uiControls.updateProgressBar() instead
     
     
     toggleLayers() {
@@ -768,72 +602,6 @@ class TrainMonitor {
     /**
      * Automatically pan to keep train in view during single-train simulation
      */
-    autoPanToTrain() {
-        // Only auto-pan in single-train mode when simulation is running
-        if (this.isAllTrainsMode || !this.isRunning || !this.currentTrainNumber) {
-            return;
-        }
-
-        // Get current train position
-        const trainPosition = this.currentPosition;
-        if (!trainPosition || !this.map) {
-            return;
-        }
-
-        // Get the actual map container element to account for sidebar effects
-        const mapContainer = document.querySelector('.map-container');
-        if (!mapContainer) {
-            return;
-        }
-
-        // Get the actual visible map container dimensions (accounting for sidebars)
-        const mapContainerRect = mapContainer.getBoundingClientRect();
-        const actualMapWidth = mapContainerRect.width;
-        const actualMapHeight = mapContainerRect.height;
-        
-        // Get map bounds and center
-        const mapBounds = this.map.getBounds();
-        const mapCenter = this.map.getCenter();
-        
-        // Check if train is completely outside visible area
-        const isTrainVisible = mapBounds.contains([trainPosition.lat, trainPosition.lng]);
-        
-        if (!isTrainVisible) {
-            // Train is completely outside - definitely need to pan
-            this.map.panTo([trainPosition.lat, trainPosition.lng], {
-                animate: true,
-                duration: 1.0
-            });
-            return;
-        }
-        
-        // Train is visible - check if it's getting too close to edges
-        const trainPoint = this.map.latLngToContainerPoint(trainPosition);
-        
-        // Calculate edge distances using actual map container dimensions
-        const distanceFromLeft = trainPoint.x;
-        const distanceFromRight = actualMapWidth - trainPoint.x;
-        const distanceFromTop = trainPoint.y;
-        const distanceFromBottom = actualMapHeight - trainPoint.y;
-        
-        // Define edge threshold as 20% of actual visible map size
-        const edgeThreshold = Math.min(actualMapWidth, actualMapHeight) * 0.2;
-        
-        // Check if train is within 20% of any edge
-        const nearLeftEdge = distanceFromLeft < edgeThreshold;
-        const nearRightEdge = distanceFromRight < edgeThreshold;
-        const nearTopEdge = distanceFromTop < edgeThreshold;
-        const nearBottomEdge = distanceFromBottom < edgeThreshold;
-        
-        // Only pan if train is close to edges
-        if (nearLeftEdge || nearRightEdge || nearTopEdge || nearBottomEdge) {
-            // Smooth pan to keep train in view
-            this.map.panTo([trainPosition.lat, trainPosition.lng], {
-                animate: true,
-                duration: 1.2 // Slightly slower for less distraction
-            });
-        }
-    }
     
     updateShowTrainButtonState(enabled) {
         const showTrainBtn = document.getElementById('showTrainBtn');
@@ -856,6 +624,420 @@ class TrainMonitor {
             console.log(`🧹 Auto-clean ${enabled ? 'enabled' : 'disabled'}`);
         }
     }
+    
+    // Real-time monitoring methods moved to realtime-monitor.js
+    
+    clearAllTrains() {
+        // Clear train markers
+        if (this.allTrainMarkers) {
+            this.allTrainMarkers.forEach(marker => {
+                if (marker && this.map.hasLayer(marker)) {
+                    this.tooltipSystem.removeTrainNumberHint(marker);
+                    this.map.removeLayer(marker);
+                }
+            });
+            this.allTrainMarkers.clear();
+        }
+        
+        // Clear station markers
+        if (this.allStationMarkers) {
+            this.allStationMarkers.forEach(marker => {
+                if (marker && this.map.hasLayer(marker)) {
+                    this.map.removeLayer(marker);
+                }
+            });
+            this.allStationMarkers = [];
+        }
+        
+        // Clear route lines
+        if (this.allRouteLines) {
+            this.allRouteLines.forEach(line => {
+                if (line && this.map.hasLayer(line)) {
+                    this.map.removeLayer(line);
+                }
+            });
+            this.allRouteLines = [];
+        }
+        
+        // Clear train states
+        if (this.allTrainStates) {
+            this.allTrainStates.clear();
+        }
+        
+        console.log('🧹 Cleared all trains data');
+    }
+    
+    updateTrainsToCurrentTime() {
+        if (!this.allTrains || !this.allTrainStates) return;
+        
+        // Use display time if in real-time mode, otherwise use actual current time
+        const currentTime = this.isRealtimeMode && this.currentDisplayTime ? this.currentDisplayTime : new Date();
+        const currentTimeMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+        
+        this.allTrains.forEach((train, trainNumber) => {
+            const trainState = this.allTrainStates.get(trainNumber);
+            if (trainState && train.route) {
+                // Calculate current position based on time
+                const currentPosition = this.calculateTrainPositionAtTime(train, currentTimeMinutes);
+                
+                if (currentPosition) {
+                    // Update train state
+                    trainState.currentPosition = currentPosition;
+                    trainState.currentStationIndex = currentPosition.stationIndex;
+                    
+                    // Update marker position
+                    const marker = this.allTrainMarkers.get(trainNumber);
+                    if (marker) {
+                        marker.setLatLng([currentPosition.lat, currentPosition.lng]);
+                    }
+                }
+            }
+        });
+        
+        console.log('📍 Updated all train positions to current time');
+    }
+    
+    calculateTrainPositionAtTime(train, currentTimeMinutes) {
+        if (!train.route || train.route.length < 2) return null;
+        
+        // Find the current station based on time
+        for (let i = 0; i < train.route.length - 1; i++) {
+            const currentStation = train.route[i];
+            const nextStation = train.route[i + 1];
+            
+            const departureTime = this.parseTimeToMinutes(currentStation.departure);
+            const nextArrivalTime = this.parseTimeToMinutes(nextStation.arrival);
+            
+            if (departureTime === null || nextArrivalTime === null) continue;
+            
+            // Check if train is currently between these stations
+            if (currentTimeMinutes >= departureTime && currentTimeMinutes <= nextArrivalTime) {
+                // Calculate position between stations
+                const totalTime = nextArrivalTime - departureTime;
+                const elapsedTime = currentTimeMinutes - departureTime;
+                const progress = Math.min(elapsedTime / totalTime, 1);
+                
+                // Interpolate position
+                const lat = currentStation.lat + (nextStation.lat - currentStation.lat) * progress;
+                const lng = currentStation.lng + (nextStation.lng - currentStation.lng) * progress;
+                
+                return {
+                    lat: lat,
+                    lng: lng,
+                    stationIndex: i,
+                    progress: progress
+                };
+            }
+        }
+        
+        // If not between stations, return the closest station
+        const firstStation = train.route[0];
+        return {
+            lat: firstStation.lat,
+            lng: firstStation.lng,
+            stationIndex: 0,
+            progress: 0
+        };
+    }
+    
+    restoreFullTrainList() {
+        // Restore the full train list
+        this.filteredTrainOptions = this.allTrainOptions;
+        
+        // Clear the search input
+        const input = document.getElementById('trainSearchSelect');
+        if (input) {
+            input.value = '';
+        }
+        this.selectedTrainValue = '';
+        
+        console.log('📋 Restored full train list');
+    }
+    
+    clearRealtimeTrains() {
+        // Clear any real-time specific data
+        if (this.isAllTrainsMode) {
+            // If currently in all trains mode, clear the map instead of showing all trains
+            // since we're no longer in real-time mode
+            this.multiTrainManager.clearAllTrains();
+        }
+        
+        console.log('🧹 Cleared real-time train data');
+    }
+    
+    showTimeControls() {
+        const timeControls = document.getElementById('timeControls');
+        const timeChooserBtn = document.getElementById('timeChooserBtn');
+        const timeIncrementInput = document.getElementById('timeIncrement');
+        
+        if (timeControls) {
+            timeControls.style.display = 'flex';
+            this.timeControlsVisible = true;
+            this.startTimeUpdate();
+            
+            // Enable controls
+            if (timeChooserBtn) timeChooserBtn.disabled = false;
+            if (timeIncrementInput) timeIncrementInput.disabled = false;
+        }
+    }
+    
+    hideTimeControls() {
+        const timeControls = document.getElementById('timeControls');
+        const timeChooserBtn = document.getElementById('timeChooserBtn');
+        const timeIncrementInput = document.getElementById('timeIncrement');
+        
+        if (timeControls) {
+            timeControls.style.display = 'none';
+            this.timeControlsVisible = false;
+            this.stopTimeUpdate();
+            
+            // Disable controls
+            if (timeChooserBtn) timeChooserBtn.disabled = true;
+            if (timeIncrementInput) timeIncrementInput.disabled = true;
+        }
+    }
+    
+    startTimeUpdate() {
+        this.stopTimeUpdate(); // Clear any existing interval
+        
+        // Initialize with current time
+        this.currentDisplayTime = new Date();
+        this.updateTimeDisplay();
+        
+        // Start the update interval
+        this.timeUpdateInterval = setInterval(() => {
+            this.updateTime();
+        }, 1000); // Update every second
+    }
+    
+    stopTimeUpdate() {
+        if (this.timeUpdateInterval) {
+            clearInterval(this.timeUpdateInterval);
+            this.timeUpdateInterval = null;
+        }
+    }
+    
+    async updateTime() {
+        try {
+        if (!this.currentDisplayTime) {
+            this.currentDisplayTime = new Date();
+        }
+        
+        if (this.timeIncrementMinutes === 0) {
+            // Normal second-by-second increment
+            this.currentDisplayTime = new Date(this.currentDisplayTime.getTime() + 1000);
+        } else {
+            // Increment by specified minutes
+            this.currentDisplayTime = new Date(this.currentDisplayTime.getTime() + (this.timeIncrementMinutes * 60 * 1000));
+        }
+        
+        this.updateTimeDisplay();
+        
+        // Filter trains based on the new time
+        await this.filterAndShowTrainsForTime();
+        } catch (error) {
+            console.error('❌ Error updating time:', error);
+        }
+    }
+    
+    updateTimeDisplay() {
+        const timeElement = document.getElementById('currentTime');
+        if (timeElement && this.currentDisplayTime) {
+            const hours = this.currentDisplayTime.getHours().toString().padStart(2, '0');
+            const minutes = this.currentDisplayTime.getMinutes().toString().padStart(2, '0');
+            timeElement.textContent = `${hours}:${minutes}`;
+        }
+    }
+    
+    async showTimeChooser() {
+        // Create a simple time input dialog
+        const currentTime = this.currentDisplayTime || new Date();
+        const hours = currentTime.getHours().toString().padStart(2, '0');
+        const minutes = currentTime.getMinutes().toString().padStart(2, '0');
+        const timeString = `${hours}:${minutes}`;
+        
+        const newTime = prompt('Enter time (HH:MM format):', timeString);
+        if (newTime && newTime.match(/^\d{2}:\d{2}$/)) {
+            const [hoursStr, minutesStr] = newTime.split(':');
+            const newDate = new Date();
+            newDate.setHours(parseInt(hoursStr), parseInt(minutesStr), 0, 0);
+            
+            this.currentDisplayTime = newDate;
+            this.updateTimeDisplay();
+            
+            // Filter trains based on the new time
+            await this.filterAndShowTrainsForTime();
+            
+            console.log(`🕐 Time manually set to ${newTime}`);
+        }
+    }
+    
+    updateTimeIncrement() {
+        console.log(`⏰ Time increment set to ${this.timeIncrementMinutes} minutes`);
+        // The actual increment logic is handled in updateTime()
+    }
+    
+    async filterAndShowTrainsForTime() {
+        if (!this.isRealtimeMode || !this.currentDisplayTime) return;
+        
+        const currentTimeMinutes = this.currentDisplayTime.getHours() * 60 + this.currentDisplayTime.getMinutes();
+        
+        // Clear existing trains
+        this.multiTrainManager.clearAllTrains();
+        
+        // Load all trains data first (if not already loaded)
+        if (!this.allTrains || this.allTrains.size === 0) {
+            await this.loadAllTrainsData();
+        }
+        
+        // Filter to only trains running at the current display time
+        const runningTrains = new Map();
+        const allTrainsBackup = new Map(this.allTrains); // Keep backup of all trains
+        
+        allTrainsBackup.forEach((train, trainNumber) => {
+            if (this.isTrainCurrentlyRunning(train, currentTimeMinutes)) {
+                runningTrains.set(trainNumber, train);
+            }
+        });
+        
+        // Set only running trains
+        this.allTrains = runningTrains;
+        this.isAllTrainsMode = true;
+        
+        // Create markers only for running trains
+        this.multiTrainManager.createAllTrainMarkers();
+        
+        // Update positions to current display time
+        this.updateTrainsToCurrentTime();
+        
+        // Update train hints visibility
+        this.tooltipSystem.updateAllTrainHints();
+        
+        console.log(`🕐 Filtered to ${runningTrains.size} trains running at ${this.currentDisplayTime.toTimeString()}`);
+        
+        // Show user-friendly message when no trains are running
+        if (runningTrains.size === 0) {
+            console.log(`ℹ️ No trains are currently running at ${this.currentDisplayTime.toTimeString()}. Try setting a different time using the clock icon (🕐) to see trains in operation.`);
+            
+            // Show a temporary message on the map
+            this.showNoTrainsMessage();
+        } else {
+            this.hideNoTrainsMessage();
+        }
+    }
+    
+    showNoTrainsMessage() {
+        // Remove any existing message
+        this.hideNoTrainsMessage();
+        
+        // Create a message overlay
+        const messageDiv = document.createElement('div');
+        messageDiv.id = 'noTrainsMessage';
+        messageDiv.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1000;
+            font-family: 'Segoe UI', sans-serif;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+        `;
+        
+        messageDiv.innerHTML = `
+            <div style="font-size: 18px; margin-bottom: 10px;">🚂</div>
+            <div style="font-size: 16px; font-weight: bold; margin-bottom: 8px;">No Trains Running</div>
+            <div style="font-size: 14px; margin-bottom: 12px;">No trains are currently operating at ${this.currentDisplayTime.toTimeString()}</div>
+            <div style="font-size: 12px; color: #ccc;">Click the clock icon (🕐) to set a different time and see trains in operation</div>
+        `;
+        
+        // Add to map container
+        const mapContainer = document.querySelector('.map-container');
+        if (mapContainer) {
+            mapContainer.appendChild(messageDiv);
+        }
+    }
+    
+    hideNoTrainsMessage() {
+        const messageDiv = document.getElementById('noTrainsMessage');
+        if (messageDiv) {
+            messageDiv.remove();
+        }
+    }
+    
+    async loadAllTrainsData() {
+        // This method loads all train data without creating markers
+        // It's used to get the full dataset for filtering
+        if (this.allTrains && this.allTrains.size > 0) {
+            return; // Already loaded
+        }
+        
+        // Load train data without creating markers
+        try {
+            console.log('Loading all trains data for filtering...');
+            
+            // Wait for station coordinates to be loaded
+            if (typeof stationCoordinatesFromCSV === 'undefined' || Object.keys(stationCoordinatesFromCSV).length === 0) {
+                console.log('Waiting for station coordinates to load...');
+                await new Promise(resolve => {
+                    const checkCoordinates = () => {
+                        if (typeof stationCoordinatesFromCSV !== 'undefined' && Object.keys(stationCoordinatesFromCSV).length > 0) {
+                            resolve();
+                        } else {
+                            setTimeout(checkCoordinates, 100);
+                        }
+                    };
+                    checkCoordinates();
+                });
+            }
+            
+            // Load all train data
+            const response = await fetch('assets/data/vandebharath.csv');
+            if (!response.ok) {
+                throw new Error(`Failed to load CSV: ${response.status}`);
+            }
+            
+            const csvText = await response.text();
+            const allTrainData = this.trainDataManager.parseAllTrainData(csvText);
+            
+            // Store all train data without creating markers
+            this.allTrains.clear();
+            allTrainData.forEach(trainData => {
+                this.allTrains.set(trainData.trainNumber, trainData);
+            });
+            
+            console.log('📊 Loaded all trains data for filtering...');
+        } catch (error) {
+            console.error('Error loading all trains data:', error);
+        }
+    }
+    
+    updateTrainsForCurrentTime() {
+        if (!this.isRealtimeMode || !this.currentDisplayTime) return;
+        
+        const currentTimeMinutes = this.currentDisplayTime.getHours() * 60 + this.currentDisplayTime.getMinutes();
+        
+        // Filter trains based on the current display time
+        const runningTrains = new Map();
+        
+        // We need to get the original train data to filter from
+        // For now, we'll work with the current allTrains data
+        if (this.allTrains) {
+            // This is a simplified approach - in a real implementation,
+            // we'd need to maintain the original full dataset
+            console.log(`🕐 Updating trains for time: ${this.currentDisplayTime.toTimeString()}`);
+            
+            // Update train positions based on current display time
+            this.updateTrainsToCurrentTime();
+        }
+    }
+    
+    // Tooltip methods moved to tooltip-system.js
     
     // Solace Integration Methods
     async connectToSolace() {
@@ -934,7 +1116,7 @@ class TrainMonitor {
                 const brokerType = window.solaceTrainMonitor.brokerType || 'solace';
                 console.log(`🔄 Attempting to connect to ${brokerType} broker...`);
                 
-            const connected = await this.connectToSolace();
+            const connected = await this.solaceIntegration.connectToSolace();
             if (connected) {
                     console.log(`✅ ${brokerType} broker integration enabled - train events will be published to broker`);
             } else {
@@ -998,6 +1180,19 @@ class TrainMonitor {
             }
         }
     }
+    
+    
+    /**
+     * Auto-pan the map to keep the train visible within the visible bounds
+     * @param {Object} trainLatLng - Train position as {lat, lng}
+     * @param {number} marginPercent - Margin percentage (default 15%)
+     * @returns {boolean} True if panning occurred, false if train is already visible
+     */
+    autoPanToKeepTrainVisible(trainLatLng, marginPercent = 15) {
+        return this.uiControls.autoPanToKeepTrainVisible(trainLatLng, marginPercent);
+    }
+    
+    
     
     toggleRightSidebar() {
         const rightSidebar = document.getElementById('rightSidebar');
@@ -1226,16 +1421,28 @@ class TrainMonitor {
         }
     }
     
-    toggleAlertPanel() {
-        const alertPanel = document.getElementById('alertBottomPanel');
-        const container = document.querySelector('.container');
-        if (alertPanel && container) {
-            const isOpen = alertPanel.classList.contains('open');
-            alertPanel.classList.toggle('open');
-            container.classList.toggle('alert-panel-open');
-            console.log(`🚨 Alert panel ${isOpen ? 'closed' : 'opened'}`);
+    // Alert panel methods moved to alert-system.js
+    
+    positionAlertButton(isPanelOpen) {
+        const alertButton = document.querySelector('.alert-toggle-btn');
+        if (alertButton) {
+            if (isPanelOpen) {
+                // Move to top when panel is open (multiple rows)
+                alertButton.style.position = 'fixed';
+                alertButton.style.top = '20px';
+                alertButton.style.right = '20px';
+                alertButton.style.bottom = 'auto';
+                alertButton.style.zIndex = '10000';
+                alertButton.title = 'Close Alert Panel';
         } else {
-            console.error('❌ Alert panel or container element not found');
+                // Move back to bottom when panel is closed
+                alertButton.style.position = 'fixed';
+                alertButton.style.bottom = '20px';
+                alertButton.style.right = '20px';
+                alertButton.style.top = 'auto';
+                alertButton.style.zIndex = '1000';
+                alertButton.title = 'Open Alert Panel';
+            }
         }
     }
     
@@ -1246,6 +1453,8 @@ class TrainMonitor {
             alertPanel.classList.remove('open');
             container.classList.remove('alert-panel-open');
             console.log('🚨 Alert panel closed');
+            
+            // Map size will be automatically adjusted by CSS
         } else {
             console.error('❌ Alert panel or container element not found');
         }
@@ -1296,7 +1505,8 @@ class TrainMonitor {
     async getAvailableTrainNumbers() {
         try {
             // Load train data directly from CSV to get all available trains
-            const response = await fetch('assets/data/trains.csv');
+            // const response = await fetch('assets/data/trains.csv');
+            const response = await fetch('assets/data/vandebharath.csv');
             if (!response.ok) {
                 throw new Error(`Failed to load CSV: ${response.status}`);
             }
@@ -1310,8 +1520,8 @@ class TrainMonitor {
                 const line = lines[i].trim();
                 if (!line) continue;
                 
-                const columns = line.split(',');
-                if (columns.length >= 12) {
+                const columns = parseCSVLine(line);
+                if (columns.length >= 17) {
                     const trainNumber = columns[0];
                     if (trainNumber) {
                         trainNumbers.add(trainNumber);
@@ -1371,7 +1581,7 @@ class TrainMonitor {
         }
 
         // Remove existing flag if any
-        this.removeAlertFlag(stationCode);
+        this.alertSystem.removeAlertFlag(stationCode);
 
         // Don't create flag if alert count is 0
         if (alertCount === 0) {
@@ -1499,58 +1709,7 @@ class TrainMonitor {
         console.log(`🚩 Added alert flag for station ${stationCode} (${station.name}) with ${alertCount} alerts`);
     }
 
-    // Test function to manually create a flag (for debugging)
-    testAlertFlag(stationCode = 'DR') {
-        console.log(`🚩 Testing alert flag creation at station: ${stationCode}`);
-        this.addAlertFlag(stationCode, 1);
-    }
-
-    // Test function to create flags at multiple stations
-    testMultipleFlags() {
-        console.log('🚩 Testing multiple alert flags...');
-        const testStations = ['CSMT', 'DR', 'TNA', 'KYN', 'IGP'];
-        testStations.forEach((station, index) => {
-            setTimeout(() => {
-                this.addAlertFlag(station, index + 1);
-            }, index * 500); // Stagger the creation
-        });
-    }
-
-    // Test function to create a flag at a fixed position (for debugging CSS)
-    testAlertFlagFixed() {
-        console.log('🚩 Testing alert flag at fixed position...');
-        const flag = document.createElement('div');
-        flag.className = 'alert-flag';
-        flag.style.left = '200px';
-        flag.style.top = '200px';
-        flag.style.position = 'absolute';
-        flag.style.zIndex = '1000';
-        
-        const tooltip = document.createElement('div');
-        tooltip.className = 'alert-flag-tooltip';
-        tooltip.textContent = '1 alert at Test Station';
-        flag.appendChild(tooltip);
-        
-        document.body.appendChild(flag);
-        console.log('🚩 Fixed position flag created - should show red flag emoji');
-    }
-
-    // Simple test to check if flags are working at all
-    testSimpleFlag() {
-        console.log('🚩 Creating simple test flag...');
-        const testDiv = document.createElement('div');
-        testDiv.innerHTML = '🚩';
-        testDiv.style.position = 'fixed';
-        testDiv.style.left = '100px';
-        testDiv.style.top = '100px';
-        testDiv.style.fontSize = '30px';
-        testDiv.style.zIndex = '9999';
-        testDiv.style.backgroundColor = 'yellow';
-        testDiv.style.padding = '10px';
-        testDiv.style.border = '2px solid red';
-        document.body.appendChild(testDiv);
-        console.log('🚩 Simple test flag created with yellow background');
-    }
+    // Test methods removed - no longer needed
 
     updateAlertFlag(stationCode, alertCount) {
         if (this.alertFlags.has(stationCode)) {
@@ -1559,13 +1718,13 @@ class TrainMonitor {
             
             // If alert count is 0, just remove the flag
             if (alertCount === 0) {
-                this.removeAlertFlag(stationCode);
+                this.alertSystem.removeAlertFlag(stationCode);
                 console.log(`🚩 Removed alert flag for station ${stationCode} - no alerts remaining`);
                 return;
             }
             
             // Remove existing flag and recreate with updated content
-            this.removeAlertFlag(stationCode);
+            this.alertSystem.removeAlertFlag(stationCode);
             this.addAlertFlag(stationCode, alertCount);
             
             // Restore served state if it was served
@@ -1623,6 +1782,7 @@ class TrainMonitor {
         // Clear current train selection
         this.currentTrainNumber = null;
         this.currentTrainName = null;
+        this.currentTrainData = null;
         this.stations = [];
         this.route = [];
         
@@ -1637,7 +1797,7 @@ class TrainMonitor {
         this.clearAllAlertFlags();
         
         // Clear train markers and trails
-        this.clearAllTrainMarkers();
+        this.multiTrainManager.clearAllTrainMarkers();
         if (this.clearTrainTrail) {
             this.clearTrainTrail();
         }
@@ -1658,8 +1818,8 @@ class TrainMonitor {
             this.stationMarkers = [];
         }
         
-        // Clear route line from map
-        if (this.routeLine) {
+        // Clear route line
+        if (this.routeLine && this.map.hasLayer(this.routeLine)) {
             this.map.removeLayer(this.routeLine);
             this.routeLine = null;
         }
@@ -1667,14 +1827,15 @@ class TrainMonitor {
         // Disable all train icons
         this.disableAllTrainIcons();
         
-        // Reset dropdown to default state
-        const trainDropdown = document.getElementById('trainDropdown');
-        if (trainDropdown) {
-            trainDropdown.value = '';
+        // Reset searchable select to default state
+        const trainSearchSelect = document.getElementById('trainSearchSelect');
+        if (trainSearchSelect) {
+            trainSearchSelect.value = '';
         }
+        this.selectedTrainValue = '';
         
         // Clear train info panel completely using the dedicated method
-        this.clearTrainInfo();
+        this.uiControls.clearTrainInfo();
         
         // Reset progress bar
         const progressFill = document.getElementById('progressFill');
@@ -1734,6 +1895,28 @@ class TrainMonitor {
                 flag.style.left = `${point.x + 8}px`;
                 flag.style.top = `${point.y - 15}px`;
             }
+        }
+    }
+    
+    // Update tooltip positions when map moves or zooms
+    updateTooltipPositions() {
+        try {
+            // Update single train marker tooltip
+            if (this.trainMarker && this.trainMarker._tooltipElement && 
+                this.trainMarker._tooltipElement.style.opacity === '1') {
+                this.tooltipSystem.positionClickTooltip(this.trainMarker, this.trainMarker._tooltipElement);
+            }
+            
+            // Update all train markers tooltips
+            if (this.allTrainMarkers) {
+                this.allTrainMarkers.forEach(marker => {
+                    if (marker._tooltipElement && marker._tooltipElement.style.opacity === '1') {
+                        this.tooltipSystem.positionClickTooltip(marker, marker._tooltipElement);
+                    }
+                });
+            }
+        } catch (error) {
+            console.error('❌ Error updating tooltip positions:', error);
         }
     }
 
@@ -1956,7 +2139,7 @@ class TrainMonitor {
         }
     }
     
-    async raiseAlert(trainNumber, alertType) {
+    async raiseAlert(trainNumber, alertType, coachNumber = null) {
         try {
             // Check if simulation is running
             if (!this.isRunning) {
@@ -1976,6 +2159,7 @@ class TrainMonitor {
                 type: alertType,
                 trainNumber: trainNumber.toString(),
                 trainName: trainData.trainName,
+                coachNumber: coachNumber || 'Unknown',
                 previousStation: trainData.previousStation,
                 previousStationName: trainData.previousStationName,
                 nextStation: trainData.nextStation,
@@ -1989,7 +2173,7 @@ class TrainMonitor {
             
             // Publish alert raised event directly
             const topic = `tms/alert/raised/${alertType}/${trainNumber}/${trainData.nextStation}`;
-            await this.publishAlertEvent(topic, alertPayload);
+            await this.solaceIntegration.publishAlertEvent(topic, alertPayload);
             
             console.log(`⚠️ Alert raised: ${alertType} for train ${trainNumber}`);
             console.log(`📊 Alert payload:`, alertPayload);
@@ -2006,18 +2190,6 @@ class TrainMonitor {
             const previousStationIndex = Math.max(0, currentStationIndex);
             const nextStationIndex = Math.min(this.stations.length - 1, currentStationIndex + 1);
             
-            console.log(`🔍 Debug - Train ${trainNumber} data:`, {
-                currentStationIndex,
-                previousStationIndex,
-                nextStationIndex,
-                currentStation: `${this.stations[currentStationIndex]?.code} - ${this.stations[currentStationIndex]?.name}`,
-                previousStation: `${this.stations[previousStationIndex]?.code} - ${this.stations[previousStationIndex]?.name}`,
-                nextStation: `${this.stations[nextStationIndex]?.code} - ${this.stations[nextStationIndex]?.name}`,
-                distanceTraveled: this.distanceTraveled,
-                currentPosition: this.currentPosition,
-                simulationRunning: this.isRunning,
-                isAtStation: this.isAtStation
-            });
             
             return {
                 trainName: this.currentTrainName || 'UNKNOWN',
@@ -2036,15 +2208,6 @@ class TrainMonitor {
             const trainData = this.allTrains.get(trainNumber);
             const trainState = this.allTrainStates.get(trainNumber);
             
-            console.log(`🔍 Debug - All Trains mode - Train ${trainNumber} data:`, {
-                trainData,
-                trainState: trainState ? {
-                    currentStationIndex: trainState.currentStationIndex,
-                    currentPosition: trainState.currentPosition,
-                    distanceTraveled: trainState.distanceTraveled,
-                    isAtStation: trainState.isAtStation
-                } : 'No state'
-            });
             
             if (trainState && trainData.route) {
                 // Use the actual train state for accurate position data
@@ -2242,9 +2405,7 @@ class TrainMonitor {
                 await window.solaceTrainMonitor.publishTrainArrivedDestination(trainData);
                 
                 // Clear any unserved alerts at the destination station
-                console.log(`🏁 Train ${this.currentTrainNumber} reached destination ${destinationStation.name}, checking for unserved alerts...`);
-                console.log(`🔍 EventManager available:`, !!window.eventManager);
-                console.log(`🔍 Destination station:`, destinationStation);
+                console.log(`🏁 Train ${this.currentTrainNumber} reached destination ${destinationStation.name}`);
                 
                 if (window.eventManager && destinationStation) {
                     window.eventManager.clearUnservedAlertsAtDestination(
@@ -2379,9 +2540,7 @@ class TrainMonitor {
                 await window.solaceTrainMonitor.publishTrainArrivedDestination(eventData);
                 
                 // Clear any unserved alerts at the destination station
-                console.log(`🏁 Train ${trainNumber} reached destination ${destinationStation.name}, checking for unserved alerts...`);
-                console.log(`🔍 EventManager available:`, !!window.eventManager);
-                console.log(`🔍 Destination station:`, destinationStation);
+                console.log(`🏁 Train ${trainNumber} reached destination ${destinationStation.name}`);
                 
                 if (window.eventManager && destinationStation) {
                     window.eventManager.clearUnservedAlertsAtDestination(
@@ -2494,7 +2653,8 @@ class TrainMonitor {
         // Load CSV data and find train information
         try {
             // Load the CSV file
-            const response = await fetch('assets/data/trains.csv');
+            // const response = await fetch('assets/data/trains.csv');
+            const response = await fetch('assets/data/vandebharath.csv');
             if (!response.ok) {
                 throw new Error(`Failed to load CSV: ${response.status}`);
             }
@@ -2519,7 +2679,7 @@ class TrainMonitor {
         
         // Find all rows for the specified train number
         const trainRows = lines.slice(1).filter(line => {
-            const columns = line.split(',');
+            const columns = parseCSVLine(line);
             return columns[0] === trainNumber || columns[0] === trainNumber.toString();
         });
         
@@ -2532,25 +2692,30 @@ class TrainMonitor {
         }
         
         // Extract train information from first row
-        const firstRow = trainRows[0].split(',');
+        const firstRow = parseCSVLine(trainRows[0]);
         const trainName = firstRow[1];
-        const sourceStation = firstRow[8];
-        const sourceStationName = firstRow[9];
-        const destinationStation = firstRow[10];
-        const destinationStationName = firstRow[11];
+        const sourceStation = firstRow[13]; // Updated index for Source Station
+        const sourceStationName = firstRow[14]; // Updated index for Source Station Name
+        const destinationStation = firstRow[15]; // Updated index for Destination Station
+        const destinationStationName = firstRow[16]; // Updated index for Destination Station Name
         
         console.log(`Train: ${trainName}, Route: ${sourceStationName} to ${destinationStationName}`);
         
-        // Parse route data
+        // Parse route data with enhanced fields
         const route = trainRows.map((row, index) => {
-            const columns = row.split(',');
+            const columns = parseCSVLine(row);
             return {
                 sequence: parseInt(columns[2]),
                 code: columns[3],
                 name: columns[4],
                 arrival: columns[5],
-                departure: columns[6],
-                distance: parseInt(columns[7]),
+                haltTime: parseInt(columns[6]) || 0, // New field: Halt Time
+                departure: columns[7],
+                distance: parseFloat(columns[8]) || 0,
+                distanceTraveled: parseFloat(columns[9]) || 0, // New field: Distance Traveled
+                distanceToNext: parseFloat(columns[10]) || 0, // New field: Distance to Next Station
+                distanceToDestination: parseFloat(columns[11]) || 0, // New field: Distance to Destination
+                platformNumber: columns[12] || 'TBD', // New field: Platform Number
                 lat: 0, // Will be populated from station coordinates
                 lng: 0  // Will be populated from station coordinates
             };
@@ -2609,7 +2774,6 @@ class TrainMonitor {
         `;
         
         try {
-            console.log(`🔍 Looking up OSM coordinates for ${stationName} (${stationCode})`);
             const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`);
             
             // Check if response is JSON
@@ -2645,7 +2809,6 @@ class TrainMonitor {
         console.log('🗺️ Adding coordinates to route stations...');
         
         // Apply coordinates from CSV
-        console.log(`🔍 CSV coordinates available: ${Object.keys(stationCoordinatesFromCSV).length} stations`);
         route.forEach(station => {
             const coords = stationCoordinatesFromCSV[station.code];
             if (coords) {
@@ -2688,7 +2851,7 @@ class TrainMonitor {
     displayTrainData(trainData) {
         // Reset all trains mode when individual train is selected
         this.isAllTrainsMode = false;
-        this.clearAllTrainMarkers();
+        this.multiTrainManager.clearAllTrainMarkers();
         
         // Clear all train states
         this.allTrainStates.clear();
@@ -2703,6 +2866,9 @@ class TrainMonitor {
         if (trainData) {
             this.currentTrainNumber = trainData.trainNumber;
             this.currentTrainName = trainData.trainName;
+            this.currentTrainData = trainData; // Store complete train data for coach information
+            console.log('🔧 displayTrainData - stored trainData:', trainData);
+            console.log('🔧 displayTrainData - coachCount:', trainData.coachCount, 'coaches:', trainData.coaches);
             
             // Update sidebar train information
             document.getElementById('train-number').textContent = trainData.trainNumber || '-';
@@ -2715,7 +2881,7 @@ class TrainMonitor {
             this.updateShowTrainButtonState(true);
             
             // Initialize progress bar to 0% when train is first selected
-            this.updateProgressBar();
+            this.uiControls.updateProgressBar();
         } else {
             // Disable Show Train button when no train is selected
             this.updateShowTrainButtonState(false);
@@ -2754,6 +2920,9 @@ class TrainMonitor {
                 </div>
             `;
         }
+        
+        // Update the sidebar train information using the proper function
+        this.uiControls.updateTrainInfo();
     }
     
     updateMapWithTrainRoute(trainData) {
@@ -2771,7 +2940,7 @@ class TrainMonitor {
             const iconAnchor = isFirstOrLast ? [10, 10] : [6, 6];
             const className = isFirstOrLast ? 'station-marker origin-destination' : 'station-marker';
             
-            // Debug logging
+            // Log first/last station
             if (isFirstOrLast) {
                 console.log(`🔵 Origin/Destination marker: ${station.name} (${station.code}) - Class: ${className}, Size: ${iconSize[0]}x${iconSize[1]}`);
             }
@@ -2779,50 +2948,42 @@ class TrainMonitor {
             const marker = L.marker([station.lat, station.lng], {
                 icon: L.divIcon({
                     className: className,
-                    html: '',
+                    // html: isFirstOrLast ? '🚉' : '●',
                     iconSize: iconSize,
                     iconAnchor: iconAnchor
                 })
             }).addTo(this.map);
             
-            marker.bindPopup(`
-                <div style="text-align: center; font-family: 'Segoe UI', sans-serif; min-width: 200px;">
-                    <h3 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚉 ${station.name}</h3>
-                    <div style="background: #f8f9fa; border-radius: 6px; padding: 8px; margin: 6px 0;">
-                        <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                            <span style="color: #6c757d;">Code:</span>
-                            <span style="color: #495057; font-weight: 600;">${station.code}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                            <span style="color: #6c757d;">Sequence:</span>
-                            <span style="color: #495057; font-weight: 600;">${station.sequence}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                            <span style="color: #6c757d;">Distance:</span>
-                            <span style="color: #495057; font-weight: 600;">${station.distance} km</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                            <span style="color: #6c757d;">Arrival:</span>
-                            <span style="color: #495057; font-weight: 600;">${station.arrival || 'N/A'}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                            <span style="color: #6c757d;">Departure:</span>
-                            <span style="color: #495057; font-weight: 600;">${station.departure || 'N/A'}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                            <span style="color: #6c757d;">Latitude:</span>
-                            <span style="color: #495057; font-weight: 600; font-family: monospace;">${station.lat.toFixed(6)}°</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                            <span style="color: #6c757d;">Longitude:</span>
-                            <span style="color: #495057; font-weight: 600; font-family: monospace;">${station.lng.toFixed(6)}°</span>
-                        </div>
-                    </div>
-                </div>
-            `);
+            // Store station data on marker for tooltip access
+            marker._stationData = station;
+            marker._markerType = 'station';
+            
+            
+            // Add unified tooltip system (click to show, like train markers)
+            this.tooltipSystem.setupClickTooltip(marker);
             
             this.stationMarkers.push(marker);
         });
+        
+        // Create route line connecting all stations (similar to All Trains mode)
+        const routeCoordinates = trainData.route.map(station => [station.lat, station.lng]);
+        const routeLine = L.polyline(routeCoordinates, {
+            color: '#dc3545', // Red color for single train route
+            weight: 3,
+            opacity: 0.7
+        }).addTo(this.map);
+        
+        // Store route line for cleanup
+        if (!this.routeLine) {
+            this.routeLine = null;
+        }
+        // Remove existing route line if any
+        if (this.routeLine) {
+            this.map.removeLayer(this.routeLine);
+        }
+        this.routeLine = routeLine;
+        
+        console.log(`🛤️ Created route line connecting ${trainData.route.length} stations`);
         
         // Update the stations data for train movement
         this.stations = trainData.route.map(station => ({
@@ -2830,7 +2991,8 @@ class TrainMonitor {
             lat: station.lat,
             lng: station.lng,
             code: station.code,
-            distance: station.distance // Use actual distance from CSV
+            distance: station.distance, // Use actual distance from CSV
+            platformNumber: station.platformNumber // Include platform number
         }));
         
         // Reset simulation state for new train
@@ -2843,11 +3005,9 @@ class TrainMonitor {
         
         // Recreate train marker with proper train icon at starting station
         if (this.trainMarker) {
-            console.log('🔍 Removing existing train marker');
+            this.tooltipSystem.removeTrainNumberHint(this.trainMarker);
             this.map.removeLayer(this.trainMarker);
         }
-        
-        console.log('🔍 Creating new train marker at:', this.stations[0]);
         this.trainMarker = L.marker([this.stations[0].lat, this.stations[0].lng], {
             icon: L.divIcon({
                 className: 'train-marker',
@@ -2857,32 +3017,16 @@ class TrainMonitor {
             })
         }).addTo(this.map);
         
-        console.log('🔍 New train marker created:', this.trainMarker);
         
-        // Add simple mouseover tooltip
-        this.setupSimpleTooltip(this.trainMarker);
+        // Add simple click tooltip
+        this.tooltipSystem.setupClickTooltip(this.trainMarker);
         
-        // Add test click handler to manually show tooltip
-        this.trainMarker.on('click', () => {
-            console.log('🔍 Train marker clicked - testing tooltip manually');
-            if (this.trainMarker._tooltipElement) {
-                console.log('🔍 Showing tooltip manually');
-                this.updateTooltipContent(this.trainMarker, this.trainMarker._tooltipElement);
-                const markerPoint = this.map.latLngToContainerPoint(this.trainMarker.getLatLng());
-                this.trainMarker._tooltipElement.style.left = markerPoint.x + 'px';
-                this.trainMarker._tooltipElement.style.top = markerPoint.y + 'px';
-                this.trainMarker._tooltipElement.style.opacity = '1';
-                setTimeout(() => {
-                    this.trainMarker._tooltipElement.style.opacity = '0';
-                }, 3000);
-            } else {
-                console.log('❌ No tooltip element found on marker');
-            }
-        });
+        // Add train number hint
+        this.tooltipSystem.addTrainNumberHint(this.trainMarker, this.currentTrainNumber);
         
         // Generate waypoints for the loaded train route to follow exact track
-        this.waypoints = this.generateWaypoints();
-        this.totalDistance = this.calculateTotalDistance();
+        this.waypoints = this.trainDataManager.generateWaypoints();
+        this.totalDistance = this.trainDataManager.calculateTotalDistance();
         
         // Update train marker popup with new train data
         if (this.trainMarker) {
@@ -2921,510 +3065,14 @@ class TrainMonitor {
         }
         
         // Update the sidebar display with train information
-        this.updateDisplay();
-        this.updateTrainInfo();
+        console.log('🔄 Calling updateDisplay from train-simulation module');
+        this.trainSimulation.updateDisplay();
+        this.uiControls.updateTrainInfo();
     }
     
     // Cleaned up - removed duplicate code
     
-    async simulationLoop() {
-        if (!this.isRunning || this.isPaused) return;
-        
-        if (this.isAllTrainsMode) {
-            // Update all trains
-            await this.updateAllTrains();
-        } else {
-            // Update single train
-            await this.updateStationStop(); // Check if station stop time has elapsed
-        this.updateTrainPhysics();
-        await this.updateTrainPosition();
-        this.updateDisplay();
-        this.updateTrainInfo(); // Add comprehensive train info update
-            
-            // Debug logging (remove in production)
-            if (this.currentStationIndex < this.stations.length) {
-                const currentStation = this.stations[this.currentStationIndex];
-                const nextStation = this.stations[this.currentStationIndex + 1];
-                if (nextStation) {
-                    const distanceToNext = this.calculateDistance(
-                        this.currentPosition.lat, this.currentPosition.lng,
-                        nextStation.lat, nextStation.lng
-                    );
-                    // Calculate progress for debug logging
-                    const totalDistance = this.calculateDistance(
-                        currentStation.lat, currentStation.lng,
-                        nextStation.lat, nextStation.lng
-                    );
-                    const progress = totalDistance > 0 ? ((totalDistance - distanceToNext) / totalDistance * 100).toFixed(1) : 0;
-                    // console.log(`🚂 Train ${this.currentTrainNumber}: Station ${this.currentStationIndex + 1}/${this.stations.length} (${currentStation?.name}), Speed: ${Math.round(this.currentSpeed)} km/h, Progress: ${progress}%, Distance to ${nextStation.name}: ${distanceToNext.toFixed(3)} km`);
-                } else {
-                    // console.log(`🚂 Train ${this.currentTrainNumber}: Station ${this.currentStationIndex + 1}/${this.stations.length} (${currentStation?.name}), Speed: ${Math.round(this.currentSpeed)} km/h`);
-                }
-            }
-        }
-        
-        // Schedule next update
-        setTimeout(() => this.simulationLoop(), 1000 / this.speed);
-    }
-    
-    async updateAllTrains() {
-        let allTrainsCompleted = true;
-        let allTrainsAtStart = true;
-        
-        // Update each train's simulation
-        for (const [trainNumber, trainData] of this.allTrains) {
-            const trainState = this.allTrainStates.get(trainNumber);
-            if (!trainState) continue;
-            
-            // Update station stop for this train
-            await this.updateAllTrainStationStop(trainNumber, trainState);
-            
-            // Update physics for this train
-            this.updateAllTrainPhysics(trainNumber, trainData, trainState);
-            
-            // Update position for this train
-            await this.updateAllTrainPosition(trainNumber, trainData, trainState);
-            
-            // Update marker position
-            const marker = this.allTrainMarkers.get(trainNumber);
-            if (marker) {
-                // Only update position - don't recreate the icon to prevent flashing
-                marker.setLatLng([trainState.currentPosition.lat, trainState.currentPosition.lng]);
-                
-                // Update popup with current information (tooltip is static to avoid interfering with auto-hide)
-                const trainData = this.allTrains.get(trainNumber);
-                if (trainData) {
-                    marker.setPopupContent(this.createTrainTooltip(trainData));
-                }
-            }
-            
-            // Check if train is at destination
-            const isAtDestination = trainState.currentStationIndex >= trainData.route.length - 1;
-            const isAtStart = trainState.currentStationIndex === 0 && trainState.currentSpeed === 0;
-            
-            if (!isAtDestination) {
-                allTrainsCompleted = false;
-            }
-            
-            if (!isAtStart) {
-                allTrainsAtStart = false;
-            }
-        }
-        
-        // Update status based on all trains state
-        if (allTrainsCompleted || allTrainsAtStart) {
-            this.updateStatus('All Trains Stopped');
-        } else {
-            this.updateStatus('All Trains Running');
-        }
-    }
-    
-    async updateAllTrainStationStop(trainNumber, trainState) {
-        // Handle station stop duration for individual train
-        if (trainState.isAtStation && trainState.stationStopStartTime) {
-            const elapsedTime = Date.now() - trainState.stationStopStartTime;
-            
-            if (elapsedTime >= this.stationStopDuration) {
-                // Get train data for event publishing
-                const trainData = this.allTrains.get(trainNumber);
-                if (trainData) {
-                    // Publish train departed from station event for multi-train
-                    await this.publishAllTrainDepartedStationEvent(trainNumber, trainData, trainState);
-                }
-                
-                // Station stop time is over, resume movement
-                trainState.isAtStation = false;
-                trainState.stationStopStartTime = null;
-                // console.log(`🚂 Train ${trainNumber} departing from station...`);
-            }
-        }
-    }
-    
-    updateAllTrainPhysics(trainNumber, trainData, trainState) {
-        // Don't update physics if train is stopped at a station
-        if (trainState.isAtStation) {
-            trainState.currentSpeed = 0;
-            return;
-        }
-        
-        if (trainState.currentStationIndex < trainData.route.length - 1) {
-            const currentStation = trainData.route[trainState.currentStationIndex];
-            const nextStation = trainData.route[trainState.currentStationIndex + 1];
-            
-            // Calculate progress percentage based on coordinate distance
-            const coordinateDistance = this.calculateDistance(
-                trainState.currentPosition.lat, trainState.currentPosition.lng,
-                nextStation.lat, nextStation.lng
-            );
-            const totalCoordinateDistance = this.calculateDistance(
-                currentStation.lat, currentStation.lng,
-                nextStation.lat, nextStation.lng
-            );
-            
-            // Calculate progress percentage (0 = at current station, 1 = at next station)
-            const progress = totalCoordinateDistance > 0 ? 1 - (coordinateDistance / totalCoordinateDistance) : 0;
-            
-            // Use progress-based deceleration with more aggressive thresholds
-            if (progress < 0.2) {
-                // Early journey - accelerate quickly to max speed
-                trainState.currentSpeed = Math.min((trainState.currentSpeed || 0) + 8, this.maxSpeed);
-            } else if (progress < 0.6) {
-                // Mid journey - maintain max speed
-                trainState.currentSpeed = Math.min((trainState.currentSpeed || 0) + 2, this.maxSpeed);
-            } else if (progress < 0.75) {
-                // Approaching station - start gentle deceleration to 72 km/h
-                const targetSpeed = this.maxSpeed * 0.6; // 72 km/h
-                if (trainState.currentSpeed > targetSpeed) {
-                    trainState.currentSpeed = Math.max(trainState.currentSpeed - 4, targetSpeed);
-                } else {
-                    trainState.currentSpeed = Math.min(trainState.currentSpeed + 1, targetSpeed);
-                }
-            } else if (progress < 0.85) {
-                // Near station - decelerate to 10 km/h
-                const targetSpeed = this.maxSpeed * 0.08; // 10 km/h
-                if (trainState.currentSpeed > targetSpeed) {
-                    trainState.currentSpeed = Math.max(trainState.currentSpeed - 6, targetSpeed);
-                } else {
-                    trainState.currentSpeed = Math.min(trainState.currentSpeed + 0.5, targetSpeed);
-                }
-            } else if (progress < 0.98) {
-                // Very close to station - decelerate to stop
-                trainState.currentSpeed = Math.max(trainState.currentSpeed - 3, 0);
-            } else {
-                // At station
-                trainState.currentSpeed = 0;
-            }
-        } else {
-            // At final station, stop the train
-            trainState.currentSpeed = 0;
-        }
-    }
-    
-    async updateAllTrainPosition(trainNumber, trainData, trainState) {
-        // Don't move if train is stopped at a station
-        if (trainState.isAtStation) {
-            return;
-        }
-        
-        if (trainState.currentStationIndex < trainData.route.length - 1) {
-            const currentStation = trainData.route[trainState.currentStationIndex];
-            const nextStation = trainData.route[trainState.currentStationIndex + 1];
-            
-            // Calculate direction vector
-            const deltaLat = nextStation.lat - currentStation.lat;
-            const deltaLng = nextStation.lng - currentStation.lng;
-            const distance = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng);
-            
-            if (distance > 0) {
-                // Move towards next station (scale factor adjusted for coordinate system)
-                // Apply speed multiplier to make movement faster with higher simulation speed
-                const moveDistance = (trainState.currentSpeed || 0) * 0.001 * this.speed; // Scale factor with speed multiplier
-                const ratio = Math.min(moveDistance / distance, 1);
-                
-                trainState.currentPosition.lat += deltaLat * ratio;
-                trainState.currentPosition.lng += deltaLng * ratio;
-                
-                // Check if we've reached the next station using progress-based approach
-                // Calculate how far we've moved from the current station
-                const distanceFromCurrent = this.calculateDistance(
-                    trainState.currentPosition.lat, trainState.currentPosition.lng,
-                    currentStation.lat, currentStation.lng
-                );
-                const totalDistance = this.calculateDistance(
-                    currentStation.lat, currentStation.lng,
-                    nextStation.lat, nextStation.lng
-                );
-                
-                // If we've moved more than 90% of the way to the next station, consider it reached
-                if (totalDistance > 0 && (distanceFromCurrent / totalDistance) > 0.9) {
-                    trainState.currentStationIndex++;
-                    trainState.currentPosition.lat = nextStation.lat;
-                    trainState.currentPosition.lng = nextStation.lng;
-                    trainState.currentSpeed = 0;
-                    
-                    // Publish train arrived at station event for multi-train
-                    await this.publishAllTrainArrivedStationEvent(trainNumber, trainData, trainState);
-                    
-                    // Start station stop
-                    trainState.isAtStation = true;
-                    trainState.stationStopStartTime = Date.now();
-                    
-                    // Publish train stopped at station event for multi-train
-                    await this.publishAllTrainStoppedStationEvent(trainNumber, trainData, trainState);
-                    
-                    console.log(`🚉 Train ${trainNumber} arrived at ${nextStation.name}! Stopping for ${this.stationStopDuration/1000} seconds...`);
-                    
-                    // If we've reached the final station, stop the train
-                    if (trainState.currentStationIndex >= trainData.route.length - 1) {
-                        console.log(`🏁 ALL TRAINS - Train ${trainNumber} REACHED FINAL DESTINATION! Station index: ${trainState.currentStationIndex}, Total stations: ${trainData.route.length}`);
-                        console.log(`🏁 Final station: ${nextStation.name} (${nextStation.code})`);
-                        // Publish train arrived at destination event for multi-train
-                        await this.publishAllTrainArrivedDestinationEvent(trainNumber, trainData, trainState);
-                        console.log(`🏁 Train ${trainNumber} reached final destination!`);
-                    }
-                }
-            }
-        }
-    }
-    
-    updateTrainPhysics() {
-        // Update train physics (acceleration, deceleration, speed)
-        // Don't update physics if train is stopped at a station
-        if (this.isAtStation) {
-            this.currentSpeed = 0;
-            return;
-        }
-        
-        if (this.currentStationIndex < this.stations.length - 1) {
-            const currentStation = this.stations[this.currentStationIndex];
-            const nextStation = this.stations[this.currentStationIndex + 1];
-            
-            // Calculate progress percentage based on coordinate distance
-            const coordinateDistance = this.calculateDistance(
-                this.currentPosition.lat, this.currentPosition.lng,
-                nextStation.lat, nextStation.lng
-            );
-            const totalCoordinateDistance = this.calculateDistance(
-                currentStation.lat, currentStation.lng,
-                nextStation.lat, nextStation.lng
-            );
-            
-            // Calculate progress percentage (0 = at current station, 1 = at next station)
-            const progress = totalCoordinateDistance > 0 ? 1 - (coordinateDistance / totalCoordinateDistance) : 0;
-            
-            // Use progress-based deceleration with more aggressive thresholds
-            if (progress < 0.2) {
-                // Early journey - accelerate quickly to max speed
-                this.currentSpeed = Math.min((this.currentSpeed || 0) + 8, this.maxSpeed);
-            } else if (progress < 0.6) {
-                // Mid journey - maintain max speed
-                this.currentSpeed = Math.min((this.currentSpeed || 0) + 2, this.maxSpeed);
-            } else if (progress < 0.75) {
-                // Approaching station - start gentle deceleration to 72 km/h
-                const targetSpeed = this.maxSpeed * 0.6; // 72 km/h
-                if (this.currentSpeed > targetSpeed) {
-                    this.currentSpeed = Math.max(this.currentSpeed - 4, targetSpeed);
-            } else {
-                    this.currentSpeed = Math.min(this.currentSpeed + 1, targetSpeed);
-                }
-            } else if (progress < 0.85) {
-                // Near station - decelerate to 10 km/h
-                const targetSpeed = this.maxSpeed * 0.08; // 10 km/h
-                if (this.currentSpeed > targetSpeed) {
-                    this.currentSpeed = Math.max(this.currentSpeed - 6, targetSpeed);
-                } else {
-                    this.currentSpeed = Math.min(this.currentSpeed + 0.5, targetSpeed);
-                }
-            } else if (progress < 0.98) {
-                // Very close to station - decelerate to 0
-                this.currentSpeed = Math.max(this.currentSpeed - 3, 0);
-            } else {
-                // At station - stop completely
-                this.currentSpeed = 0;
-            }
-        } else {
-            // At final station, stop the train
-            this.currentSpeed = 0;
-        }
-    }
-    
-    async updateTrainPosition() {
-        // Update train position along the route
-        // Don't move if train is stopped at a station
-        if (this.isAtStation) {
-            return;
-        }
-        
-        if (this.currentStationIndex < this.stations.length - 1) {
-            const currentStation = this.stations[this.currentStationIndex];
-            const nextStation = this.stations[this.currentStationIndex + 1];
-            
-            // Calculate direction vector
-            const deltaLat = nextStation.lat - currentStation.lat;
-            const deltaLng = nextStation.lng - currentStation.lng;
-            const distance = Math.sqrt(deltaLat * deltaLat + deltaLng * deltaLng);
-            
-            if (distance > 0) {
-                // Move towards next station (scale factor adjusted for coordinate system)
-                // Apply speed multiplier to make movement faster with higher simulation speed
-                const moveDistance = (this.currentSpeed || 0) * 0.001 * this.speed; // Scale factor with speed multiplier
-                const ratio = Math.min(moveDistance / distance, 1);
-                
-                this.currentPosition.lat += deltaLat * ratio;
-                this.currentPosition.lng += deltaLng * ratio;
-                
-                // Check if we've reached the next station using progress-based approach
-                // Calculate how far we've moved from the current station
-                const distanceFromCurrent = this.calculateDistance(
-                    this.currentPosition.lat, this.currentPosition.lng,
-                    currentStation.lat, currentStation.lng
-                );
-                const totalDistance = this.calculateDistance(
-                    currentStation.lat, currentStation.lng,
-                    nextStation.lat, nextStation.lng
-                );
-                
-                // If we've moved more than 98% of the way to the next station, consider it reached
-                if (totalDistance > 0 && (distanceFromCurrent / totalDistance) > 0.98) {
-                    this.currentStationIndex++;
-                    this.currentPosition.lat = nextStation.lat;
-                    this.currentPosition.lng = nextStation.lng;
-                    this.currentSpeed = 0;
-                    
-                    // Publish train arrived at station event
-                    await this.publishTrainArrivedStationEvent();
-                    
-                    // Start station stop
-                    this.isAtStation = true;
-                    this.stationStopStartTime = Date.now();
-                    this.updateStatus('Stopped');
-                    
-                    // Publish train stopped at station event
-                    await this.publishTrainStoppedStationEvent();
-                    
-                    console.log(`🚉 Train arrived at ${nextStation.name}! Stopping for ${this.stationStopDuration/1000} seconds...`);
-                    
-                    // If we've reached the final station, stop the simulation
-                    if (this.currentStationIndex >= this.stations.length - 1) {
-                        console.log(`🏁 TRAIN REACHED FINAL DESTINATION! Station index: ${this.currentStationIndex}, Total stations: ${this.stations.length}`);
-                        console.log(`🏁 Final station: ${nextStation.name} (${nextStation.code})`);
-                        await this.publishTrainArrivedDestinationEvent();
-                        this.stop();
-                        this.updateStatus('Arrived at destination!');
-                    }
-                }
-            }
-        }
-    }
-    
-    async updateStationStop() {
-        // Handle station stop duration
-        if (this.isAtStation && this.stationStopStartTime) {
-            const elapsedTime = Date.now() - this.stationStopStartTime;
-            
-            if (elapsedTime >= this.stationStopDuration) {
-                // Publish train departed from station event
-                await this.publishTrainDepartedStationEvent();
-                
-                // Station stop time is over, resume movement
-                this.isAtStation = false;
-                this.stationStopStartTime = null;
-                this.updateStatus('Running');
-                
-                console.log(`🚂 Train departing from ${this.stations[this.currentStationIndex]?.name || 'station'}...`);
-            }
-        }
-    }
-    
-    updateDisplay() {
-        // Update train marker position - ensure currentPosition is valid
-        if (this.trainMarker && this.currentPosition && this.currentPosition.lat !== undefined && this.currentPosition.lng !== undefined) {
-            this.trainMarker.setLatLng([this.currentPosition.lat, this.currentPosition.lng]);
-            
-            // Auto-pan to keep train in view during single-train simulation
-            this.autoPanToTrain();
-            
-            // Tooltip content is updated on mouseover for better performance
-        }
-        
-        // Update status display
-        const statusElement = document.getElementById('trainStatus');
-        const statusIndicator = document.getElementById('statusIndicator');
-        const speedElement = document.getElementById('currentSpeed');
-        const progressElement = document.getElementById('progressFill');
-        const currentStationElement = document.getElementById('currentStation');
-        const nextStationElement = document.getElementById('nextStation');
-        
-        // Handle empty stations array
-        if (this.stations.length === 0) {
-            if (statusElement) statusElement.textContent = 'No Train Selected';
-            if (currentStationElement) currentStationElement.textContent = '-';
-            if (nextStationElement) nextStationElement.textContent = '-';
-            if (speedElement) speedElement.textContent = '0 km/h';
-            if (progressElement) progressElement.style.width = '0%';
-            return;
-        }
-        
-        if (statusElement) {
-            // Update status based on train state, including station stops
-            if (this.isAtStation) {
-                statusElement.textContent = 'Stopped';
-            } else if (this.isRunning && !this.isPaused) {
-                statusElement.textContent = 'Running';
-            } else if (this.isPaused) {
-                statusElement.textContent = 'Paused';
-            } else {
-                statusElement.textContent = 'Stopped';
-            }
-        }
-        
-        // Update status indicator color
-        if (statusIndicator) {
-            // Remove existing status classes
-            statusIndicator.classList.remove('status-running', 'status-paused', 'status-stopped');
-            
-            // Add appropriate status class based on current state
-            if (this.isAtStation) {
-                statusIndicator.classList.add('status-stopped');
-            } else if (this.isRunning && !this.isPaused) {
-                statusIndicator.classList.add('status-running');
-            } else if (this.isPaused) {
-                statusIndicator.classList.add('status-paused');
-            } else {
-                statusIndicator.classList.add('status-stopped');
-            }
-        }
-        
-        if (currentStationElement) {
-            const currentStation = this.stations[this.currentStationIndex];
-            currentStationElement.textContent = currentStation ? currentStation.name : '-';
-        }
-        
-        if (nextStationElement) {
-            const nextStation = this.stations[this.currentStationIndex + 1];
-            nextStationElement.textContent = nextStation ? nextStation.name : '-';
-        }
-        
-        if (speedElement) {
-            speedElement.textContent = `${Math.round(this.currentSpeed || 0)} km/h`;
-        }
-        
-        // Progress is handled by updateTrainInfo() method
-        
-        // Update train marker popup
-        if (this.trainMarker) {
-            const popup = this.trainMarker.getPopup();
-            if (popup) {
-                const currentStation = this.stations[this.currentStationIndex];
-                const stationName = currentStation ? currentStation.name : 'Unknown Station';
-                const speed = Math.round(this.currentSpeed || 0);
-                
-                popup.setContent(`
-                    <div style="text-align: center; font-family: 'Segoe UI', sans-serif; min-width: 200px;">
-                        <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚂 Train</h4>
-                        <div style="background: #f8f9fa; border-radius: 6px; padding: 8px; margin: 6px 0;">
-                            <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                                <span style="color: #6c757d;">Status:</span>
-                                <span id="popupStatus" style="color: #495057; font-weight: 600;">${stationName}</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                                <span style="color: #6c757d;">Speed:</span>
-                                <span id="popupSpeed" style="color: #495057; font-weight: 600;">${speed} km/h</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                                <span style="color: #6c757d;">Latitude:</span>
-                                <span id="popupLat" style="color: #495057; font-weight: 600; font-family: monospace;">${this.currentPosition.lat.toFixed(6)}°</span>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
-                                <span style="color: #6c757d;">Longitude:</span>
-                                <span id="popupLng" style="color: #495057; font-weight: 600; font-family: monospace;">${this.currentPosition.lng.toFixed(6)}°</span>
-                            </div>
-                        </div>
-                    </div>
-                `);
-            }
-        }
-    }
+    // Simulation methods moved to train-simulation.js and multi-train-manager.js
     
     calculateDistance(lat1, lng1, lat2, lng2) {
         // Calculate distance between two points using Haversine formula
@@ -3474,7 +3122,8 @@ class TrainMonitor {
     async loadAvailableTrains() {
         try {
             console.log('Loading available trains...');
-            const response = await fetch('assets/data/trains.csv');
+            // const response = await fetch('assets/data/trains.csv');
+            const response = await fetch('assets/data/vandebharath.csv');
             if (!response.ok) {
                 throw new Error(`Failed to load CSV: ${response.status}`);
             }
@@ -3482,29 +3131,291 @@ class TrainMonitor {
             const csvText = await response.text();
             const trains = this.parseAvailableTrains(csvText);
             
-            const dropdown = document.getElementById('trainDropdown');
-            if (dropdown) {
-                // Clear existing options except the first one
-                dropdown.innerHTML = '<option value="">Select a train...</option>';
+            // Store train options for searchable select
+            this.allTrainOptions = [];
                 
                 // Add "All Trains" option
-                const allTrainsOption = document.createElement('option');
-                allTrainsOption.value = 'all';
-                allTrainsOption.textContent = '🚂 All Trains';
-                dropdown.appendChild(allTrainsOption);
+            this.allTrainOptions.push({
+                value: 'all',
+                label: '🚂 All Trains',
+                text: '🚂 All Trains'
+            });
                 
                 // Add individual train options
                 trains.forEach(train => {
-                    const option = document.createElement('option');
-                    option.value = train.number;
-                    option.textContent = `${train.number} - ${train.name} (${train.source} → ${train.destination})`;
-                    dropdown.appendChild(option);
+                this.allTrainOptions.push({
+                    value: train.number,
+                    label: `${train.number} - ${train.name} (${train.source} → ${train.destination})`,
+                    text: `${train.number} - ${train.name} (${train.source} → ${train.destination})`
                 });
-                
-                console.log(`Loaded ${trains.length} trains + All Trains option into dropdown`);
-            }
+            });
+            
+            console.log(`Loaded ${trains.length} trains + All Trains option into searchable select`);
         } catch (error) {
             console.error('Error loading available trains:', error);
+        }
+    }
+    
+    /**
+     * Initialize searchable select functionality
+     */
+    initializeSearchableSelect() {
+        const input = document.getElementById('trainSearchSelect');
+        const dropdown = document.getElementById('trainDropdown');
+        const dropdownToggle = document.getElementById('dropdownToggle');
+        const optionsContainer = dropdown.querySelector('.dropdown-options');
+        
+        if (!input || !dropdown || !optionsContainer) return;
+        
+        // Store all train options for filtering
+        this.allTrainOptions = [];
+        this.filteredTrainOptions = null; // Will be set when filtering is needed
+        this.selectedTrainValue = '';
+        this.highlightedIndex = -1;
+        this.isDropdownOpen = false;
+        
+        // Input event listeners
+        input.addEventListener('input', (e) => {
+            this.uiControls.filterAndShowOptions(e.target.value);
+        });
+        
+        input.addEventListener('focus', () => {
+            // When focusing on input, show filtered results based on current text
+            this.uiControls.filterAndShowOptions(input.value);
+        });
+        
+        input.addEventListener('keydown', (e) => {
+            this.uiControls.handleKeydown(e);
+        });
+        
+        // Dropdown arrow click - show all trains
+        if (dropdownToggle) {
+            dropdownToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (this.isDropdownOpen) {
+                    this.uiControls.hideDropdown();
+            } else {
+                    this.uiControls.showAllTrains();
+                }
+            });
+        }
+        
+        // Click outside to close
+        document.addEventListener('click', (e) => {
+            if (!input.contains(e.target) && !dropdown.contains(e.target) && 
+                (!dropdownToggle || !dropdownToggle.contains(e.target))) {
+                this.uiControls.hideDropdown();
+            }
+        });
+        
+        // Prevent dropdown from closing when clicking inside
+        dropdown.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+    
+    /**
+     * Filter and show options based on search term
+     */
+    filterAndShowOptions(searchTerm) {
+        const input = document.getElementById('trainSearchSelect');
+        const dropdown = document.getElementById('trainDropdown');
+        const optionsContainer = dropdown.querySelector('.dropdown-options');
+        
+        if (!input || !dropdown || !optionsContainer) return;
+        
+        const searchLower = searchTerm.toLowerCase().trim();
+        
+        // Use filtered options in real-time mode, otherwise use all options
+        const availableOptions = this.isRealtimeMode && this.filteredTrainOptions ? 
+            this.filteredTrainOptions : this.allTrainOptions;
+        
+        const filteredOptions = availableOptions.filter(option => {
+            if (!searchLower) return true;
+            const optionText = option.text.toLowerCase();
+            return optionText.includes(searchLower) || option.value.includes(searchLower);
+        });
+        
+        // Clear existing options
+        optionsContainer.innerHTML = '';
+        
+        // Add filtered options
+        filteredOptions.forEach((option, index) => {
+            const optionElement = document.createElement('div');
+            optionElement.className = 'dropdown-option';
+            optionElement.textContent = option.text;
+            optionElement.dataset.value = option.value;
+            optionElement.dataset.index = index;
+            
+            optionElement.addEventListener('click', () => {
+                this.uiControls.selectOption(option);
+            });
+            
+            optionsContainer.appendChild(optionElement);
+        });
+        
+        this.highlightedIndex = -1;
+        this.uiControls.showDropdown();
+        
+        console.log(`🔍 Filtered trains: ${filteredOptions.length} matches for "${searchTerm}"`);
+    }
+    
+    /**
+     * Show all trains (when dropdown arrow is clicked)
+     */
+    showAllTrains() {
+        const dropdown = document.getElementById('trainDropdown');
+        const optionsContainer = dropdown.querySelector('.dropdown-options');
+        const dropdownToggle = document.getElementById('dropdownToggle');
+        
+        if (!dropdown || !optionsContainer) return;
+        
+        // Clear existing options
+        optionsContainer.innerHTML = '';
+        
+        // Add all train options (filtered in real-time mode)
+        const availableOptions = this.isRealtimeMode && this.filteredTrainOptions ? 
+            this.filteredTrainOptions : this.allTrainOptions;
+        
+        availableOptions.forEach((option, index) => {
+            const optionElement = document.createElement('div');
+            optionElement.className = 'dropdown-option';
+            optionElement.textContent = option.text;
+            optionElement.dataset.value = option.value;
+            optionElement.dataset.index = index;
+            
+            optionElement.addEventListener('click', () => {
+                this.uiControls.selectOption(option);
+            });
+            
+            optionsContainer.appendChild(optionElement);
+        });
+        
+        this.uiControls.showDropdown();
+    }
+    
+    /**
+     * Show dropdown
+     */
+    showDropdown() {
+        const dropdown = document.getElementById('trainDropdown');
+        const dropdownToggle = document.getElementById('dropdownToggle');
+        
+        if (dropdown) {
+            dropdown.style.display = 'block';
+            this.isDropdownOpen = true;
+        }
+        
+        if (dropdownToggle) {
+            dropdownToggle.classList.add('active');
+        }
+    }
+    
+    /**
+     * Hide dropdown
+     */
+    hideDropdown() {
+        const dropdown = document.getElementById('trainDropdown');
+        const dropdownToggle = document.getElementById('dropdownToggle');
+        
+        if (dropdown) {
+            dropdown.style.display = 'none';
+            this.isDropdownOpen = false;
+        }
+        
+        if (dropdownToggle) {
+            dropdownToggle.classList.remove('active');
+        }
+        
+        this.highlightedIndex = -1;
+    }
+    
+    /**
+     * Handle keyboard navigation
+     */
+    handleKeydown(e) {
+        const options = document.querySelectorAll('.dropdown-option');
+        
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                this.highlightedIndex = Math.min(this.highlightedIndex + 1, options.length - 1);
+                this.updateHighlight();
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                this.highlightedIndex = Math.max(this.highlightedIndex - 1, -1);
+                this.updateHighlight();
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (this.highlightedIndex >= 0 && options[this.highlightedIndex]) {
+                    const option = options[this.highlightedIndex];
+                    const value = option.dataset.value;
+                    const text = option.textContent;
+                    this.uiControls.selectOption({ value, text });
+                }
+                break;
+            case 'Escape':
+                this.uiControls.hideDropdown();
+                break;
+        }
+    }
+    
+    /**
+     * Update highlighted option
+     */
+    updateHighlight() {
+        const options = document.querySelectorAll('.dropdown-option');
+        options.forEach((option, index) => {
+            option.classList.toggle('highlighted', index === this.highlightedIndex);
+        });
+    }
+    
+    /**
+     * Select an option
+     */
+    selectOption(option) {
+        const input = document.getElementById('trainSearchSelect');
+        if (input) {
+            input.value = option.text;
+            this.selectedTrainValue = option.value;
+        }
+        this.uiControls.hideDropdown();
+    }
+    
+    /**
+     * Get selected train from searchable select
+     */
+    async selectTrainFromSearchableSelect() {
+        if (!this.selectedTrainValue) {
+            console.log('No train selected');
+            return;
+        }
+        
+        const selectedValue = this.selectedTrainValue;
+        
+        // Prevent duplicate processing if the same train is already selected
+        if (this.isProcessingTrain && this.currentProcessingTrain === selectedValue) {
+            console.log(`Already processing train ${selectedValue}, skipping duplicate request`);
+            return;
+        }
+        
+        this.isProcessingTrain = true;
+        this.currentProcessingTrain = selectedValue;
+        
+        try {
+            console.log(`Selected: ${selectedValue}`);
+            
+            if (selectedValue === 'all') {
+                await this.trainDataManager.loadAllTrains();
+            } else {
+                await this.trainDataManager.searchTrain(selectedValue);
+            }
+        } finally {
+            this.isProcessingTrain = false;
+            this.currentProcessingTrain = null;
         }
     }
     
@@ -3517,12 +3428,12 @@ class TrainMonitor {
             const line = lines[i].trim();
             if (!line) continue;
             
-            const columns = line.split(',');
-            if (columns.length >= 12) {
+            const columns = parseCSVLine(line);
+            if (columns.length >= 17) {
                 const trainNumber = columns[0];
                 const trainName = columns[1];
-                const sourceStation = columns[9];
-                const destinationStation = columns[11];
+                const sourceStation = columns[13];
+                const destinationStation = columns[15];
                 
                 if (!trainMap.has(trainNumber)) {
                     trainMap.set(trainNumber, {
@@ -3540,6 +3451,11 @@ class TrainMonitor {
     }
     
     async selectTrainFromDropdown() {
+        // This method is kept for backward compatibility but now redirects to the new method
+        return this.uiControls.selectTrainFromSearchableSelect();
+    }
+    
+    async selectTrainFromDropdownOld() {
         const dropdown = document.getElementById('trainDropdown');
         if (!dropdown || !dropdown.value) {
             console.log('No train selected');
@@ -3562,10 +3478,10 @@ class TrainMonitor {
             
             if (selectedValue === 'all') {
                 // Handle "All Trains" selection
-                await this.loadAllTrains();
+                await this.trainDataManager.loadAllTrains();
             } else {
                 // Handle individual train selection
-                await this.searchTrain(selectedValue);
+                await this.trainDataManager.searchTrain(selectedValue);
             }
         } finally {
             this.isProcessingTrain = false;
@@ -3593,16 +3509,17 @@ class TrainMonitor {
             }
             
             // Clear existing train markers
-            this.clearAllTrainMarkers();
+            this.multiTrainManager.clearAllTrainMarkers();
             
             // Load all train data
-            const response = await fetch('assets/data/trains.csv');
+            // const response = await fetch('assets/data/trains.csv');
+            const response = await fetch('assets/data/vandebharath.csv');
             if (!response.ok) {
                 throw new Error(`Failed to load CSV: ${response.status}`);
             }
             
             const csvText = await response.text();
-            const allTrainData = this.parseAllTrainData(csvText);
+            const allTrainData = this.trainDataManager.parseAllTrainData(csvText);
             
             // Store all train data
             this.allTrains.clear();
@@ -3610,14 +3527,21 @@ class TrainMonitor {
                 this.allTrains.set(trainData.trainNumber, trainData);
             });
             
-            // Create markers for all trains
-            this.createAllTrainMarkers();
-            
             // Set mode
             this.isAllTrainsMode = true;
             
+            // Only create markers if in real-time mode
+            if (this.isRealtimeMode) {
+                // Create markers for all trains (will be filtered by time)
+                this.multiTrainManager.createAllTrainMarkers();
+            } else {
+                // In non-real-time mode, don't create all markers
+                // Just clear the map and show no trains unless one is specifically selected
+                this.multiTrainManager.clearAllTrains();
+            }
+            
             // Clear train info since we're showing all trains (no need to refresh)
-            this.clearTrainInfo();
+            this.uiControls.clearTrainInfo();
             
             // Enable all train icons in bottom panel
             this.allTrains.forEach((trainData, trainNumber) => {
@@ -3640,16 +3564,19 @@ class TrainMonitor {
             const line = lines[i].trim();
             if (!line) continue;
             
-            const parts = line.split(',');
-            if (parts.length < 12) continue;
+            const parts = parseCSVLine(line);
+            if (parts.length < 17) continue;
             
             const trainNumber = parts[0];
             const trainName = parts[1];
             const stationCode = parts[3];
             const stationName = parts[4];
-            const distance = parseFloat(parts[7]) || 0;
-            const source = parts[8];
-            const destination = parts[10];
+            const arrival = parts[5];
+            const haltTime = parts[6];
+            const departure = parts[7];
+            const distance = parseFloat(parts[8]) || 0;
+            const source = parts[13];
+            const destination = parts[15];
             
             if (!trainMap.has(trainNumber)) {
                 trainMap.set(trainNumber, {
@@ -3669,7 +3596,10 @@ class TrainMonitor {
                     name: stationName,
                     lat: coordinates.lat,
                     lng: coordinates.lng,
-                    distance: distance
+                    distance: distance,
+                    arrival: arrival,
+                    departure: departure,
+                    haltTime: haltTime
                 });
             }
         }
@@ -3691,12 +3621,12 @@ class TrainMonitor {
                     })
                 }).addTo(this.map);
                 
-                    // Add simple mouseover tooltip
+                // Add detailed click tooltip
                     marker._trainNumber = trainNumber; // Store train number for tooltip
-                    this.setupSimpleTooltip(marker);
+                this.tooltipSystem.setupClickTooltip(marker);
                 
-                // Add popup with train information (click to show)
-                marker.bindPopup(this.createTrainTooltip(trainData));
+                // Add train number hint
+                this.tooltipSystem.addTrainNumberHint(marker, trainNumber);
                 
                 this.allTrainMarkers.set(trainNumber, marker);
                 
@@ -3723,7 +3653,7 @@ class TrainMonitor {
             const iconAnchor = isFirstOrLast ? [10, 10] : [4, 4];
             const className = isFirstOrLast ? 'station-marker origin-destination' : 'station-marker';
             
-            // Debug logging for All Trains mode
+            // Log first/last station for All Trains mode
             if (isFirstOrLast) {
                 console.log(`🔵 All Trains - Origin/Destination marker: ${station.name} (${station.code}) - Class: ${className}, Size: ${iconSize[0]}x${iconSize[1]}`);
             }
@@ -3738,18 +3668,16 @@ class TrainMonitor {
                 })
             }).addTo(this.map);
             
-            // Add popup with station information
-            stationMarker.bindPopup(`
-                <div style="text-align: center; font-family: 'Segoe UI', sans-serif;">
-                    <h4 style="margin: 0 0 8px 0; color: #2c3e50;">🚉 ${station.name}</h4>
-                    <div style="background: #f8f9fa; border-radius: 6px; padding: 8px; margin: 6px 0;">
-                        <div style="margin: 4px 0;"><strong>Code:</strong> ${station.code}</div>
-                        <div style="margin: 4px 0;"><strong>Train:</strong> ${trainNumber}</div>
-                        <div style="margin: 4px 0;"><strong>Distance:</strong> ${station.distance} km</div>
-                        <div style="margin: 4px 0;"><strong>Position:</strong> ${index + 1}/${trainData.route.length}</div>
-                    </div>
-                </div>
-            `);
+            // Store station data on marker for tooltip access
+            stationMarker._stationData = station;
+            stationMarker._markerType = 'station';
+            stationMarker._trainNumber = trainNumber; // Store train number for context
+            
+            
+            // Add unified tooltip system (click to show, like train markers)
+            this.tooltipSystem.setupClickTooltip(stationMarker);
+            
+            // Station popup removed - using click tooltips only
             
             // Store station markers for cleanup
             if (!this.allStationMarkers) {
@@ -3761,7 +3689,7 @@ class TrainMonitor {
         // Create route line connecting all stations
         const routeCoordinates = trainData.route.map(station => [station.lat, station.lng]);
         const routeLine = L.polyline(routeCoordinates, {
-            color: this.getTrainColor(trainNumber),
+            color: this.multiTrainManager.getTrainColor(trainNumber),
             weight: 3,
             opacity: 0.7
         }).addTo(this.map);
@@ -3773,11 +3701,7 @@ class TrainMonitor {
         this.allRouteLines.push(routeLine);
     }
     
-    getTrainColor(trainNumber) {
-        const colors = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e'];
-        const colorIndex = parseInt(trainNumber) % colors.length;
-        return colors[colorIndex];
-    }
+    // Train color methods moved to multi-train-manager.js
     
     
     createSingleTrainTooltip() {
@@ -3789,226 +3713,277 @@ class TrainMonitor {
         return `🚂 ${this.currentTrainName || 'Train'} - ${status} (${speed}) - Station ${progress}: ${currentStation}`;
     }
     
-    setupSimpleTooltip(marker) {
-        console.log('🔍 setupSimpleTooltip called for marker:', marker);
-        if (!marker) {
-            console.error('❌ setupSimpleTooltip: marker is null or undefined');
-            return;
-        }
+    // Simple click-to-show tooltip system
+    setupClickTooltip(marker) {
+        if (!marker) return;
         
         // Clean up any existing tooltip
-        if (marker.getTooltip()) {
-            console.log('🔍 Unbinding existing tooltip');
-            marker.unbindTooltip();
+        if (marker._tooltipElement) {
+            marker._tooltipElement.remove();
+            marker._tooltipElement = null;
         }
         
-        // Remove any existing event listeners
-        marker.off('mouseover.tooltip');
-        marker.off('mouseout.tooltip');
-        
-        // Create tooltip element
+        // Create simple tooltip element
         const tooltipElement = document.createElement('div');
-        tooltipElement.className = 'train-tooltip-content';
+        tooltipElement.className = 'simple-tooltip';
         tooltipElement.style.cssText = `
-            position: absolute;
+            position: fixed;
             background: white;
             color: #2c3e50;
-            padding: 0;
+            padding: 12px;
             border-radius: 8px;
             font-size: 12px;
             font-family: 'Segoe UI', sans-serif;
-            white-space: nowrap;
-            z-index: 10001;
+            z-index: 100000;
             pointer-events: auto;
+            cursor: default;
             opacity: 0;
             transition: opacity 0.2s ease;
-            transform: translate(-50%, -100%);
-            margin-top: -8px;
             min-width: 200px;
             max-width: 280px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             border: 1px solid #dee2e6;
             text-align: center;
+            display: none;
         `;
         
-        // Add arrow
-        const arrow = document.createElement('div');
-        arrow.style.cssText = `
-            content: '';
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border: 5px solid transparent;
-            border-top-color: white;
-        `;
-        tooltipElement.appendChild(arrow);
-        
-        // Add to map container
-        const mapContainer = this.map.getContainer();
-        mapContainer.appendChild(tooltipElement);
-        
-        // Store reference on marker
+        document.body.appendChild(tooltipElement);
         marker._tooltipElement = tooltipElement;
         
-        // Show tooltip on mouseover
-        marker.on('mouseover.tooltip', () => {
-            console.log('🔍 Tooltip mouseover event triggered');
-            this.updateTooltipContent(marker, tooltipElement);
-            
-            // Position tooltip
-            const markerPoint = this.map.latLngToContainerPoint(marker.getLatLng());
-            tooltipElement.style.left = markerPoint.x + 'px';
-            tooltipElement.style.top = markerPoint.y + 'px';
-            tooltipElement.style.opacity = '1';
-            console.log('🔍 Tooltip positioned and shown at:', markerPoint);
+        // Click to show tooltip
+        marker.on('click', () => {
+            this.showClickTooltip(marker, tooltipElement);
         });
         
-        // Hide tooltip on mouseout
-        marker.on('mouseout.tooltip', () => {
-            console.log('🔍 Tooltip mouseout event triggered');
-            tooltipElement.style.opacity = '0';
-        });
-        
-        console.log('🔍 Simple tooltip setup completed for marker');
+        // ESC key to close
+        const escapeHandler = (e) => {
+            if (e.key === 'Escape' && tooltipElement.style.display !== 'none') {
+                this.hideClickTooltip(tooltipElement);
+            }
+        };
+        document.addEventListener('keydown', escapeHandler);
+        marker._escapeHandler = escapeHandler;
     }
     
-    // Update tooltip content with current train information
-    updateTooltipContent(marker, tooltipElement) {
-        console.log('🔍 updateTooltipContent called for marker:', marker);
-        if (!marker || !tooltipElement) {
-            console.error('❌ updateTooltipContent: marker or tooltipElement is null');
-            return;
-        }
+    showClickTooltip(marker, tooltipElement) {
+        // Hide any other open tooltips
+        document.querySelectorAll('.simple-tooltip').forEach(tooltip => {
+            if (tooltip !== tooltipElement) {
+                this.hideClickTooltip(tooltip);
+            }
+        });
         
-        // Get train data based on marker type
-        let trainData;
-        if (marker === this.trainMarker) {
-            // Single train mode
-            const currentStation = this.stations[this.currentStationIndex]?.name || 'Unknown';
-            const nextStation = this.stations[this.currentStationIndex + 1]?.name || 'Unknown';
-            const sourceStation = this.stations[0]?.name || 'Unknown';
-            const destinationStation = this.stations[this.stations.length - 1]?.name || 'Unknown';
-            
-            trainData = {
-                trainNumber: this.currentTrainNumber,
-                trainName: this.currentTrainName,
-                currentStation: currentStation,
-                nextStation: nextStation,
-                source: sourceStation,
-                destination: destinationStation,
-                speed: this.currentSpeed,
-                status: this.isRunning ? (this.isPaused ? 'Paused' : 'Running') : 'Stopped',
-                progress: this.stations.length > 0 ? `${this.currentStationIndex + 1}/${this.stations.length}` : '0/0'
-            };
-        } else {
-            // All trains mode - get data from marker
-            const trainNumber = marker._trainNumber;
-            if (trainNumber && this.allTrains.has(trainNumber)) {
-                const train = this.allTrains.get(trainNumber);
-                const trainState = this.allTrainStates.get(trainNumber);
-                const currentStationIndex = trainState?.currentStationIndex || 0;
-                const route = train.route || [];
-                
-                trainData = {
-                    trainNumber: trainNumber,
-                    trainName: train.trainName,
-                    currentStation: route[currentStationIndex]?.name || 'Unknown',
-                    nextStation: route[currentStationIndex + 1]?.name || 'Unknown',
-                    source: route[0]?.name || 'Unknown',
-                    destination: route[route.length - 1]?.name || 'Unknown',
-                    speed: trainState?.currentSpeed || 0,
-                    status: trainState?.isAtStation ? 'Stopped' : 'Running',
-                    progress: route.length > 0 ? `${currentStationIndex + 1}/${route.length}` : '0/0'
-                };
+        // Update content
+        this.tooltipSystem.updateClickTooltipContent(marker, tooltipElement);
+        
+        // Position tooltip
+        this.tooltipSystem.positionClickTooltip(marker, tooltipElement);
+        
+        // Show tooltip
+        tooltipElement.style.display = 'block';
+        tooltipElement.style.opacity = '1';
+    }
+    
+    hideClickTooltip(tooltipElement) {
+            tooltipElement.style.opacity = '0';
+        setTimeout(() => {
+            tooltipElement.style.display = 'none';
+        }, 200);
+    }
+    
+    updateClickTooltipContent(marker, tooltipElement) {
+        let content = '';
+        
+        if (marker._markerType === 'station') {
+            // Station marker
+            const stationData = marker._stationData;
+            if (stationData) {
+                content = `
+                    <div style="position: relative;">
+                        <button onclick="this.parentElement.parentElement.style.opacity='0'; setTimeout(() => this.parentElement.parentElement.style.display='none', 200);" 
+                                style="position: absolute; top: 4px; right: 8px; background: none; border: none; font-size: 16px; cursor: pointer; color: #666; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">×</button>
+                        <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚉 ${stationData.name}</h4>
+                        <div style="background: #f8f9fa; border-radius: 6px; padding: 10px; margin: 6px 0;">
+                            <div style="margin: 4px 0;"><strong>Station Code:</strong> ${stationData.code}</div>
+                            ${marker._trainNumber ? `<div style="margin: 4px 0;"><strong>Train:</strong> ${marker._trainNumber}</div>` : ''}
+                            <div style="margin: 4px 0;"><strong>Sequence:</strong> ${stationData.sequence || 'N/A'}</div>
+                            <div style="margin: 4px 0;"><strong>Platform:</strong> ${stationData.platformNumber || 'TBD'}</div>
+                            <div style="margin: 4px 0;"><strong>Distance:</strong> ${stationData.distance || 0} km</div>
+                            <div style="margin: 4px 0;"><strong>Arrival:</strong> ${stationData.arrival || '--:--:--'}</div>
+                            <div style="margin: 4px 0;"><strong>Departure:</strong> ${stationData.departure || '--:--:--'}</div>
+                            ${stationData.haltTime > 0 ? `<div style="margin: 4px 0;"><strong>Halt Time:</strong> ${stationData.haltTime} min</div>` : ''}
+                        </div>
+                        <div style="background: #e9ecef; border-radius: 4px; padding: 6px; margin: 6px 0; font-size: 11px;">
+                            <div style="display: flex; justify-content: space-between; margin: 2px 0; font-size: 12px;">
+                                <span style="color: #6c757d;">Coordinates:</span>
+                                <span style="color: #495057; font-weight: 600; font-family: monospace;">${stationData.lat?.toFixed(6) || 'N/A'}°, ${stationData.lng?.toFixed(6) || 'N/A'}°</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        } else 
+        {
+            // Train marker
+            const trainData = this.tooltipSystem.getClickTooltipTrainData(marker);
+            if (trainData) {
+                content = `
+                    <div style="position: relative;">
+                        <button onclick="this.parentElement.parentElement.style.opacity='0'; setTimeout(() => this.parentElement.parentElement.style.display='none', 200);" 
+                                style="position: absolute; top: 4px; right: 8px; background: none; border: none; font-size: 16px; cursor: pointer; color: #666; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;">×</button>
+                        <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚂 Train ${trainData.trainNumber}</h4>
+                        <div style="background: #f8f9fa; border-radius: 6px; padding: 10px; margin: 6px 0;">
+                            <div style="margin: 4px 0;"><strong>Name:</strong> ${trainData.trainName}</div>
+                            <div style="margin: 4px 0;"><strong>Route:</strong> ${trainData.source} → ${trainData.destination}</div>
+                            <div style="margin: 4px 0;"><strong>Current Station:</strong> ${trainData.currentStation}</div>
+                            <div style="margin: 4px 0;"><strong>Next Station:</strong> ${trainData.nextStation}</div>
+                            <div style="margin: 4px 0;"><strong>Progress:</strong> ${trainData.currentStationIndex + 1}/${trainData.totalStations}</div>
+                            <div style="margin: 4px 0;"><strong>Status:</strong> ${this.isRunning ? 'Running' : 'Stopped'}</div>
+                            <div style="margin: 4px 0;"><strong>Speed:</strong> ${this.tooltipSystem.getClickTooltipCurrentSpeed(marker)} km/h</div>
+                        </div>
+                    </div>
+                `;
             }
         }
         
-        if (trainData) {
-            console.log('🔍 Train data found:', trainData);
-            // Create tooltip content using the same format as createTrainTooltip
-            const content = `
-                <div style="text-align: center; font-family: 'Segoe UI', sans-serif; min-width: 200px;">
-                    <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚂 Train ${trainData.trainNumber}</h4>
-                    <div style="background: #f8f9fa; border-radius: 6px; padding: 8px; margin: 6px 0;">
-                        <div style="margin: 4px 0;"><strong>Name:</strong> ${trainData.trainName}</div>
-                        ${trainData.source && trainData.destination ? `<div style="margin: 4px 0;"><strong>Route:</strong> ${trainData.source} → ${trainData.destination}</div>` : ''}
-                        <div style="margin: 4px 0;"><strong>Current Station:</strong> ${trainData.currentStation}</div>
-                        <div style="margin: 4px 0;"><strong>Progress:</strong> ${trainData.progress}</div>
-                        <div style="margin: 4px 0;"><strong>Speed:</strong> ${trainData.speed} km/h</div>
-                        <div style="margin: 4px 0;"><strong>Status:</strong> <span style="color: ${trainData.status === 'Running' ? '#28a745' : '#6c757d'};">${trainData.status}</span></div>
-                        <div style="margin: 4px 0;"><strong>Next:</strong> ${trainData.nextStation}</div>
-                    </div>
-                </div>
-            `;
-            tooltipElement.innerHTML = content;
+        if (!content) {
+            content = '<div style="padding: 10px; text-align: center;">No data available</div>';
+        }
+        
+        tooltipElement.innerHTML = content;
+    }
+    
+    positionClickTooltip(marker, tooltipElement) {
+        try {
+            if (!marker || !tooltipElement || !this.map) return;
+            
+            // Get marker position in container coordinates
+            const markerPoint = this.map.latLngToContainerPoint(marker.getLatLng());
+            const mapContainer = this.map.getContainer();
+            const mapRect = mapContainer.getBoundingClientRect();
+            
+            // Calculate absolute position on page
+            const absoluteX = mapRect.left + markerPoint.x;
+            const absoluteY = mapRect.top + markerPoint.y;
+            
+            // Get tooltip dimensions for boundary checking
+            const tooltipRect = tooltipElement.getBoundingClientRect();
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+            
+            // Position tooltip above marker
+            let finalX = absoluteX;
+            let finalY = absoluteY - tooltipRect.height - 10;
+            
+            // Adjust if tooltip goes off screen
+            if (finalX + tooltipRect.width > viewportWidth) {
+                finalX = viewportWidth - tooltipRect.width - 10;
+            }
+            if (finalX < 10) {
+                finalX = 10;
+            }
+            if (finalY < 10) {
+                finalY = absoluteY + 30; // Show below marker if no space above
+            }
+            
+            // Apply position
+            tooltipElement.style.left = finalX + 'px';
+            tooltipElement.style.top = finalY + 'px';
+        } catch (error) {
+            console.error('Error positioning tooltip:', error);
+        }
+    }
+    
+    getClickTooltipTrainData(marker) {
+        // Get train data based on marker type
+        if (marker === this.trainMarker) {
+            // Single train mode
+            const sourceStation = this.stations && this.stations[0] ? this.stations[0].name : 'Unknown';
+            const destinationStation = this.stations && this.stations.length > 0 ? 
+                this.stations[this.stations.length - 1].name : 'Unknown';
+            
+            // Get current and next station information
+            const currentStationIndex = this.currentStationIndex || 0;
+            const currentStation = this.stations && this.stations[currentStationIndex] ? 
+                this.stations[currentStationIndex].name : 'Unknown';
+            const nextStation = this.stations && this.stations[currentStationIndex + 1] ? 
+                this.stations[currentStationIndex + 1].name : 'Destination';
+            
+            return {
+                trainNumber: this.currentTrainNumber || 'Unknown',
+                trainName: this.currentTrainName || 'Unknown Train',
+                source: sourceStation,
+                destination: destinationStation,
+                currentStation: currentStation,
+                nextStation: nextStation,
+                currentStationIndex: currentStationIndex,
+                totalStations: this.stations ? this.stations.length : 0
+            };
         } else {
-            console.log('❌ No train data found for marker');
+            // All trains mode
+            const trainNumber = marker._trainNumber;
+            if (trainNumber && this.allTrains && this.allTrains.has(trainNumber)) {
+                const train = this.allTrains.get(trainNumber);
+                const trainState = this.allTrainStates ? this.allTrainStates.get(trainNumber) : null;
+                
+                // Get current and next station information for all trains mode
+                let currentStation = 'Unknown';
+                let nextStation = 'Destination';
+                let currentStationIndex = 0;
+                let totalStations = 0;
+                
+                if (trainState && train.route) {
+                    currentStationIndex = trainState.currentStationIndex || 0;
+                    totalStations = train.route.length;
+                    currentStation = train.route[currentStationIndex] ? 
+                        train.route[currentStationIndex].name : 'Unknown';
+                    nextStation = train.route[currentStationIndex + 1] ? 
+                        train.route[currentStationIndex + 1].name : 'Destination';
+                }
+                
+                return {
+                    trainNumber: trainNumber,
+                    trainName: train.trainName || 'Unknown Train',
+                    source: train.source || 'Unknown',
+                    destination: train.destination || 'Unknown',
+                    currentStation: currentStation,
+                    nextStation: nextStation,
+                    currentStationIndex: currentStationIndex,
+                    totalStations: totalStations
+                };
+            }
         }
+        return null;
     }
     
-    
-    createTrainTooltip(trainData) {
-        // Get current train state for "All Trains" mode
-        const trainState = this.allTrainStates.get(trainData.trainNumber);
-        const isRunning = this.isRunning && !this.isPaused;
-        const currentStationIndex = trainState?.currentStationIndex || 0;
-        const currentStation = trainData.route[currentStationIndex]?.name || 'Unknown';
-        const speed = trainState?.currentSpeed ? `${Math.round(trainState.currentSpeed)} km/h` : '0 km/h';
-        const status = isRunning ? 'Running' : 'Stopped';
-        const progress = `${currentStationIndex + 1}/${trainData.route.length}`;
-        
-        return `
-            <div style="text-align: center; font-family: 'Segoe UI', sans-serif; min-width: 200px;">
-                <h4 style="margin: 0 0 8px 0; color: #2c3e50; font-size: 16px;">🚂 Train ${trainData.trainNumber}</h4>
-                <div style="background: #f8f9fa; border-radius: 6px; padding: 8px; margin: 6px 0;">
-                    <div style="margin: 4px 0;"><strong>Name:</strong> ${trainData.trainName}</div>
-                    <div style="margin: 4px 0;"><strong>Route:</strong> ${trainData.source} → ${trainData.destination}</div>
-                    <div style="margin: 4px 0;"><strong>Current Station:</strong> ${currentStation}</div>
-                    <div style="margin: 4px 0;"><strong>Progress:</strong> ${progress}</div>
-                    <div style="margin: 4px 0;"><strong>Speed:</strong> ${speed}</div>
-                    <div style="margin: 4px 0;"><strong>Status:</strong> <span style="color: ${isRunning ? '#28a745' : '#6c757d'};">${status}</span></div>
-                </div>
-            </div>
-        `;
+    getClickTooltipCurrentSpeed(marker) {
+        // Get current speed for train marker
+        if (marker === this.trainMarker) {
+            return this.currentSpeed || 0;
+        } else {
+            const trainNumber = marker._trainNumber;
+            if (trainNumber && this.allTrainStates && this.allTrainStates.has(trainNumber)) {
+                const trainState = this.allTrainStates.get(trainNumber);
+                return trainState.currentSpeed ? Math.round(trainState.currentSpeed) : 0;
+            }
+        }
+        return 0;
     }
     
-    clearAllTrainMarkers() {
-        // Clear train markers
-        this.allTrainMarkers.forEach(marker => {
-            this.map.removeLayer(marker);
-        });
-        this.allTrainMarkers.clear();
-        
-        // Clear station markers
-        if (this.allStationMarkers) {
-            this.allStationMarkers.forEach(marker => {
-                this.map.removeLayer(marker);
-            });
-            this.allStationMarkers = [];
-        }
-        
-        // Clear route lines
-        if (this.allRouteLines) {
-            this.allRouteLines.forEach(line => {
-                this.map.removeLayer(line);
-            });
-            this.allRouteLines = [];
-        }
-    }
+    // Train marker methods moved to multi-train-manager.js
     
     clearTrainInfo() {
         // Clear train information when in "All Trains" mode or during reset
         document.getElementById('train-number').textContent = '-';
         document.getElementById('train-name').textContent = '-';
         document.getElementById('current-station').textContent = '-';
+        document.getElementById('current-platform').textContent = '-';
         document.getElementById('next-station').textContent = '-';
         document.getElementById('train-speed').textContent = '0 km/h';
         document.getElementById('distance').textContent = '0 km';
         document.getElementById('distance-covered').textContent = '0 km';
         document.getElementById('eta').textContent = '--:--';
         document.getElementById('station-progress').textContent = '-';
-        document.getElementById('route-mode').textContent = 'No Train Selected';
     }
     
     getStationCoordinatesFromCSV(stationCode, stationName) {
@@ -4044,6 +4019,39 @@ document.addEventListener('DOMContentLoaded', () => {
     window.trainMonitorInstance = new TrainMonitor();
     window.trainMonitorInstance.init();
     
+    
+    // Add global debugging functions for visible bounds
+    // Keep only the essential auto-pan function for debugging
+    window.autoPanTrain = (trainLatLng, marginPercent = 15) => {
+        if (window.trainMonitorInstance) {
+            return window.trainMonitorInstance.autoPanToKeepTrainVisible(trainLatLng, marginPercent);
+        } else {
+            console.log('TrainMonitor instance not available');
+        }
+    };
+    
+    // Manual centering function
+    window.centerMapOnTrain = () => {
+        if (window.trainMonitorInstance && window.trainMonitorInstance.currentPosition) {
+            window.trainMonitorInstance.map.panTo(window.trainMonitorInstance.currentPosition, { 
+                animate: true, 
+                duration: 1.0 
+            });
+            console.log('🗺️ Manually centered map on train');
+        } else {
+            console.log('TrainMonitor instance or train position not available');
+        }
+    };
+    
+    // Global function for raising alerts from tooltip
+    window.raiseTrainAlert = (trainNumber, alertType, coachNumber) => {
+        if (window.trainMonitorInstance && window.trainMonitorInstance.alertSystem) {
+            window.trainMonitorInstance.alertSystem.raiseAlert(trainNumber, alertType, coachNumber);
+        } else {
+            console.warn('Train monitor or alert system not available');
+        }
+    };
+    
 });
 
 // Station coordinates are now loaded from CSV file only
@@ -4052,8 +4060,8 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadStationCoordinates() {
     try {
         console.log('🔄 Loading station coordinates from CSV...');
-        const response = await fetch('assets/data/station-coordinates.csv');
-        
+        // const response = await fetch('assets/data/station-coordinates.csv');
+        const response = await fetch('assets/data/vandebharath-coordinates.csv');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -4098,37 +4106,7 @@ async function loadStationCoordinates() {
   * @param {string} line - CSV line to parse
   * @returns {string[]} - Array of parsed values
   */
-function parseCSVLine(line) {
-    const result = [];
-    let current = '';
-    let inQuotes = false;
-    
-    for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        
-        if (char === '"') {
-            if (inQuotes && line[i + 1] === '"') {
-                // Escaped quote
-                current += '"';
-                i++; // Skip next quote
-            } else {
-                // Toggle quote state
-                inQuotes = !inQuotes;
-            }
-        } else if (char === ',' && !inQuotes) {
-            // End of field
-            result.push(current);
-            current = '';
-        } else {
-            current += char;
-        }
-    }
-    
-    // Add the last field
-    result.push(current);
-    
-    return result;
-}
+// parseCSVLine function moved to train-monitoring-utils.js
 
 // Initialize station coordinates from CSV
 let stationCoordinatesFromCSV = {};

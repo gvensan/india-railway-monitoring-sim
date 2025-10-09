@@ -49,6 +49,22 @@
 
             <div class="control-sections-container">
             <div class="control-section">
+                <div class="realtime-section">
+                    <div class="realtime-toggle">
+                        <input type="checkbox" id="realtimeCheckbox" class="toggle-checkbox">
+                        <label for="realtimeCheckbox" class="toggle-label">
+                            <span class="toggle-text">Real-time</span>
+                        </label>
+                    </div>
+                    <div id="timeControls" class="time-controls" style="display: none;">
+                        <span id="currentTime">00:00</span>
+                        <button id="timeChooserBtn" class="time-chooser-btn" title="Choose time">🕐</button>
+                        <input type="number" id="timeIncrement" class="time-increment-input" min="0" max="30" value="1" step="1" disabled>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-section">
                 <h3>Simulation Controls</h3>
                 <div class="controls">
                     <button id="playBtn" class="btn btn-primary">▶️ Play</button>
@@ -84,8 +100,20 @@
                         </span>
                     </div>
                     <div class="info-item">
+                        <span class="info-label">Coach Count:</span>
+                        <span class="info-value" id="coach-count">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Coaches:</span>
+                        <span class="info-value" id="coach-list">-</span>
+                    </div>
+                    <div class="info-item">
                         <span class="info-label">Current Station:</span>
                         <span class="info-value" id="current-station">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Platform:</span>
+                        <span class="info-value" id="current-platform">-</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">Next Station:</span>
@@ -108,10 +136,6 @@
                         <span class="info-value" id="eta">--:--</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">Route Mode:</span>
-                        <span class="info-value" id="route-mode">Station-based Waypoints</span>
-                    </div>
-                    <div class="info-item">
                         <span class="info-label">Progress:</span>
                         <span class="info-value" id="station-progress">-</span>
                     </div>
@@ -128,9 +152,15 @@
             <div class="control-section">
                 <h3>Train Selection</h3>
                 <div class="train-search">
-                    <select id="trainDropdown" class="train-input">
-                        <option value="">Select a train...</option>
-                    </select>
+                    <div class="searchable-select-container">
+                        <div class="combo-box-wrapper">
+                            <input type="text" id="trainSearchSelect" class="searchable-select-input" placeholder="🔍 Search and select a train..." autocomplete="off" />
+                            <button type="button" id="dropdownToggle" class="dropdown-arrow" title="Show all trains">▼</button>
+                        </div>
+                        <div id="trainDropdown" class="searchable-select-dropdown" style="display: none;">
+                            <div class="dropdown-options"></div>
+                        </div>
+                    </div>
                     <button id="selectTrainBtn" class="btn btn-primary">🚂 Load</button>
                 </div>
             </div>
@@ -168,8 +198,8 @@
                     <button class="filter-btn" data-filter="alert">⚠️ Alert</button>
                 </div>
                 <div class="auto-clean-toggle">
-                    <label class="toggle-label">
-                        <input type="checkbox" id="autoCleanToggle" checked>
+                    <input type="checkbox" id="autoCleanToggle" class="toggle-checkbox" checked>
+                    <label for="autoCleanToggle" class="toggle-label">
                         <span class="toggle-text">🧹 Auto-clean events (100 max)</span>
                     </label>
                 </div>
@@ -222,6 +252,31 @@
     <!-- Event Manager Script -->
     <script src="scripts/event-manager.js"></script>
     
+    <!-- Train Monitoring Utility Functions -->
+    <script src="scripts/train-monitoring-utils.js"></script>
+    
+    <!-- Solace Integration Module -->
+    <script src="scripts/solace-integration-module.js"></script>
+    
+    <!-- Tooltip System Module -->
+    <script src="scripts/tooltip-system.js"></script>
+    
+    <!-- Multi-Train Manager Module -->
+    <script src="scripts/multi-train-manager.js"></script>
+    
+    <!-- Real-Time Monitor Module -->
+    <script src="scripts/realtime-monitor.js"></script>
+    
+    <!-- Alert System Module -->
+    <script src="scripts/alert-system.js"></script>
+    
+    <!-- UI Controls Module -->
+    <script src="scripts/ui-controls.js"></script>
+    
+    <!-- Train Data Manager Module -->
+    <script src="scripts/train-data-manager.js"></script>
+    <script src="scripts/train-simulation.js"></script>
+    
     <!-- Train Monitoring JavaScript -->
     <script src="scripts/train-monitoring.js"></script>
     
@@ -245,7 +300,7 @@
               
               <div class="about-section">
                   <h4>🎯 Overview</h4>
-                  <p>This is a comprehensive real-time train monitoring and simulation system for Indian Railways, featuring interactive maps, multi-train tracking, alert management, and event monitoring capabilities.</p>
+                  <p>This is a comprehensive real-time train monitoring and simulation system focused on <strong>Vande Bharat Express</strong> trains, featuring interactive maps, multi-train tracking, alert management, and event monitoring capabilities. The system simulates the premium high-speed Vande Bharat trains across India's railway network.</p>
               </div>
               
               <div class="about-section">
@@ -280,7 +335,7 @@
                       <li><strong>Frontend:</strong> HTML5, CSS3, JavaScript ES6+ with modular design</li>
                       <li><strong>Mapping:</strong> Leaflet.js with OpenStreetMap and Thunderforest transport layer</li>
                       <li><strong>Messaging:</strong> Dual broker system - Solace PubSub+ primary with in-memory fallback</li>
-                      <li><strong>Data Sources:</strong> Indian Railways schedules, OpenStreetMap infrastructure, validated station coordinates</li>
+                      <li><strong>Data Sources:</strong> Vande Bharat Express schedules, OpenStreetMap infrastructure, validated station coordinates</li>
                       <li><strong>Event System:</strong> Real-time event streaming with comprehensive lifecycle management</li>
                       <li><strong>Alert Management:</strong> Complete alert lifecycle from raised to served/missed/unserved</li>
                       <li><strong>Performance:</strong> Coordinate caching, efficient rendering, memory management</li>

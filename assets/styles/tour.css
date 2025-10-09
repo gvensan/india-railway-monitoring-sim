@@ -10,12 +10,13 @@
     opacity: 0;
     visibility: hidden;
     transition: all 0.3s ease;
-    pointer-events: auto;
+    pointer-events: none; /* Allow mouse events to pass through when not active */
 }
 
 .tour-overlay.active {
     opacity: 0.5;
     visibility: visible;
+    pointer-events: auto; /* Enable pointer events only when tour is active */
 }
 
 .tour-highlight {

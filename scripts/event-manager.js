@@ -120,6 +120,13 @@ class EventManager {
             }
             
             const eventData = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            
+            // Validate required fields
+            if (!eventData.trainNumber && !eventData.trainName) {
+                console.warn('⚠️ Train event missing both trainNumber and trainName, skipping');
+                return;
+            }
+            
             const event = {
                 id: this.generateEventId(),
                 type: 'train',
@@ -151,6 +158,18 @@ class EventManager {
             }
             
             const eventData = typeof payload === 'string' ? JSON.parse(payload) : payload;
+            
+            // Validate required fields
+            if (!eventData.trainNumber && !eventData.trainName) {
+                console.warn('⚠️ Station event missing both trainNumber and trainName, skipping');
+                return;
+            }
+            
+            if (!eventData.status) {
+                console.warn('⚠️ Station event missing status, skipping');
+                return;
+            }
+            
             const event = {
                 id: this.generateEventId(),
                 type: 'station',
@@ -388,6 +407,7 @@ class EventManager {
                 type: type,
                 trainNumber: trainNumber,
                 trainName: alertData.trainName,
+                coachNumber: alertData.coachNumber || 'Unknown', // Include coach number
                 timestamp: alertData.timestamp,
                 raisedTime: alertData.raisedTime || alertData.timestamp, // Preserve raisedTime field
                 status: 'received'
@@ -599,6 +619,7 @@ class EventManager {
             type: alertData.type,
             trainNumber: alertData.trainNumber,
             trainName: alertData.trainName,
+            coachNumber: alertData.coachNumber || 'Unknown',
             previousStation: alertData.previousStation,
             previousStationName: alertData.previousStationName,
             nextStation: alertData.nextStation,
@@ -638,6 +659,7 @@ class EventManager {
             type: alertData.type,
             trainNumber: alertData.trainNumber,
             trainName: alertData.trainName,
+            coachNumber: alertData.coachNumber || 'Unknown',
             previousStation: alertData.movedFrom || alertData.previousStation,
             previousStationName: alertData.movedFromName || alertData.previousStationName,
             nextStation: nextStation,
@@ -674,6 +696,7 @@ class EventManager {
             type: alertData.type,
             trainNumber: alertData.trainNumber,
             trainName: alertData.trainName,
+            coachNumber: alertData.coachNumber || 'Unknown',
             stationCode: stationCode,
             stationName: stationName,
             servedAt: new Date().toISOString(),
@@ -702,6 +725,7 @@ class EventManager {
             type: alertData.type,
             trainNumber: alertData.trainNumber,
             trainName: alertData.trainName,
+            coachNumber: alertData.coachNumber || 'Unknown',
             previousStation: alertData.previousStation,
             previousStationName: alertData.previousStationName,
             nextStation: stationCode,
@@ -917,15 +941,17 @@ class EventManager {
      */
     generateAlertRaisedEventBrief(data) {
         const trainNumber = data.trainNumber || 'Unknown';
+        const trainName = data.trainName || 'Unknown Train';
         const alertType = data.type || 'Unknown';
         const stationName = data.nextStationName || 'Unknown Station';
+        const coachNumber = data.coachNumber || 'Unknown';
         
         // Check if this is a re-raised alert (moved from previous station)
         if (data.reason === 'alert_moved_from_previous_station' && data.movedFromName) {
-            return `🔄 Alert re-raised: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName} (moved from ${data.movedFromName})`;
+            return `🔄 Alert re-raised: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} (${trainName}) Coach ${coachNumber} at ${stationName} (moved from ${data.movedFromName})`;
         }
         
-        return `🚨 Alert raised: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName}`;
+        return `🚨 Alert raised: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} (${trainName}) Coach ${coachNumber} at ${stationName}`;
     }
 
 
@@ -933,18 +959,36 @@ class EventManager {
      * Generate train event brief description
      */
     generateTrainEventBrief(data) {
-        const trainNumber = data.trainNumber || 'UNKNOWN';
-        const status = data.status || 'UNKNOWN';
-        const origin = data.originName || data.origin || 'UNKNOWN';
-        const destination = data.destinationName || data.destination || 'UNKNOWN';
+        const trainNumber = data.trainNumber || 'Unknown';
+        const trainName = data.trainName || 'Unknown Train';
+        const status = data.status || 'Unknown';
         
+        // Handle different event types based on the data structure
+        if (data.eventType) {
+            switch (data.eventType) {
+                case 'train_arrival':
+                    return `🚂 Train ${trainNumber} (${trainName}) arrived at ${data.stationName || 'Unknown Station'}`;
+                case 'train_departure':
+                    return `🚂 Train ${trainNumber} (${trainName}) departed from ${data.stationName || 'Unknown Station'}`;
+                case 'train_stopped':
+                    return `🚂 Train ${trainNumber} (${trainName}) stopped at ${data.stationName || 'Unknown Station'}`;
+                case 'train_destination':
+                    return `🏁 Train ${trainNumber} (${trainName}) arrived at destination: ${data.stationName || 'Unknown Station'}`;
+                default:
+                    return `🚂 Train ${trainNumber} (${trainName}) - ${data.eventType}`;
+            }
+        }
+        
+        // Fallback to status-based logic
         switch (status) {
             case 'departed':
-                return `Train ${trainNumber} departed from ${origin}`;
+                return `🚂 Train ${trainNumber} (${trainName}) departed from ${data.currentStationName || data.originName || 'Unknown Station'}`;
             case 'arrived':
-                return `Train ${trainNumber} arrived at ${destination}`;
+                return `🚂 Train ${trainNumber} (${trainName}) arrived at ${data.currentStationName || data.destinationName || 'Unknown Station'}`;
+            case 'stopped':
+                return `🚂 Train ${trainNumber} (${trainName}) stopped at ${data.currentStationName || 'Unknown Station'}`;
             default:
-                return `Train ${trainNumber} - ${status}`;
+                return `🚂 Train ${trainNumber} (${trainName}) - ${status}`;
         }
     }
 
@@ -952,19 +996,20 @@ class EventManager {
      * Generate station event brief description
      */
     generateStationEventBrief(data) {
-        const trainNumber = data.trainNumber || 'UNKNOWN';
-        const status = data.status || 'UNKNOWN';
-        const station = data.currentStationName || data.currentStation || 'UNKNOWN';
+        const trainNumber = data.trainNumber || 'Unknown';
+        const trainName = data.trainName || 'Unknown Train';
+        const status = data.status || 'Unknown';
+        const station = data.currentStationName || data.stationName || data.currentStation || 'Unknown Station';
         
         switch (status) {
             case 'arrived':
-                return `Train ${trainNumber} arrived at ${station}`;
+                return `🚉 Train ${trainNumber} (${trainName}) arrived at ${station}`;
             case 'departed':
-                return `Train ${trainNumber} departed from ${station}`;
+                return `🚉 Train ${trainNumber} (${trainName}) departed from ${station}`;
             case 'stopped':
-                return `Train ${trainNumber} stopped at ${station}`;
+                return `🚉 Train ${trainNumber} (${trainName}) stopped at ${station}`;
             default:
-                return `Train ${trainNumber} at ${station} - ${status}`;
+                return `🚉 Train ${trainNumber} (${trainName}) at ${station} - ${status}`;
         }
     }
 
@@ -973,36 +1018,54 @@ class EventManager {
      */
     generateAlertEventBrief(data) {
         const trainNumber = data.trainNumber || 'Unknown';
+        const trainName = data.trainName || 'Unknown Train';
         const alertType = data.type || 'Unknown';
-        const stationName = data.nextStationName || 'Unknown Station';
+        const stationName = data.nextStationName || data.stationName || data.currentStationName || 'Unknown Station';
         
-        return `⚠️ Alert: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName}`;
+        // Map alert types to user-friendly names
+        const alertTypeMap = {
+            'water_tank': 'Water Tank',
+            'breakdown': 'Breakdown',
+            'ac_malfunction': 'AC Malfunction',
+            'emergency': 'Emergency'
+        };
+        
+        const friendlyAlertType = alertTypeMap[alertType] || alertType.replace(/_/g, ' ');
+        const coachNumber = data.coachNumber || 'Unknown';
+        
+        return `⚠️ Alert: ${friendlyAlertType} for Train ${trainNumber} (${trainName}) Coach ${coachNumber} at ${stationName}`;
     }
 
     generateAlertMissedEventBrief(data) {
         const trainNumber = data.trainNumber || 'Unknown';
+        const trainName = data.trainName || 'Unknown Train';
         const alertType = data.type || 'Unknown';
         const missedStation = data.missedStationName || 'Unknown Station';
         const nextStation = data.nextStationName || 'Unknown Station';
+        const coachNumber = data.coachNumber || 'Unknown';
         
-        return `❌ Missed Alert: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${missedStation} (moved to ${nextStation})`;
+        return `❌ Missed Alert: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} (${trainName}) Coach ${coachNumber} at ${missedStation} (moved to ${nextStation})`;
     }
 
     generateAlertServedEventBrief(data) {
         const trainNumber = data.trainNumber || 'Unknown';
+        const trainName = data.trainName || 'Unknown Train';
         const alertType = data.type || 'Unknown';
         const stationName = data.stationName || 'Unknown Station';
         const servedBy = data.servedBy || 'system';
+        const coachNumber = data.coachNumber || 'Unknown';
         
-        return `✅ Alert Served: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName} (${servedBy})`;
+        return `✅ Alert Served: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} (${trainName}) Coach ${coachNumber} at ${stationName} (${servedBy})`;
     }
 
     generateAlertUnservedEventBrief(data) {
         const trainNumber = data.trainNumber || 'Unknown';
+        const trainName = data.trainName || 'Unknown Train';
         const alertType = data.type || 'Unknown';
         const stationName = data.unservedStationName || 'Unknown Station';
+        const coachNumber = data.coachNumber || 'Unknown';
         
-        return `🚫 Alert Unserved: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} at ${stationName}`;
+        return `🚫 Alert Unserved: ${alertType.replace(/_/g, ' ')} for Train ${trainNumber} (${trainName}) Coach ${coachNumber} at ${stationName}`;
     }
 
     /**
@@ -1014,12 +1077,31 @@ class EventManager {
         if (data.trainNumber) details.push({ label: 'Train Number', value: data.trainNumber });
         if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
         if (data.status) details.push({ label: 'Status', value: data.status });
-        if (data.originName) details.push({ label: 'Origin', value: data.originName });
-        if (data.destinationName) details.push({ label: 'Destination', value: data.destinationName });
+        if (data.eventType) details.push({ label: 'Event Type', value: data.eventType.replace(/_/g, ' ') });
+        
+        // Station information
+        if (data.stationName) details.push({ label: 'Station', value: data.stationName });
+        if (data.stationCode) details.push({ label: 'Station Code', value: data.stationCode });
         if (data.currentStationName) details.push({ label: 'Current Station', value: data.currentStationName });
         if (data.nextStationName) details.push({ label: 'Next Station', value: data.nextStationName });
-        if (data.distanceTraveled) details.push({ label: 'Distance Traveled', value: `${data.distanceTraveled} km` });
+        if (data.previousStationName) details.push({ label: 'Previous Station', value: data.previousStationName });
+        
+        // Origin and destination
+        if (data.originName) details.push({ label: 'Origin', value: data.originName });
+        if (data.destinationName) details.push({ label: 'Destination', value: data.destinationName });
+        
+        // Timing information
+        if (data.arrivalTime) details.push({ label: 'Arrival Time', value: new Date(data.arrivalTime).toLocaleString() });
+        if (data.departureTime) details.push({ label: 'Departure Time', value: new Date(data.departureTime).toLocaleString() });
+        if (data.stopTime) details.push({ label: 'Stop Time', value: new Date(data.stopTime).toLocaleString() });
+        if (data.haltDuration) details.push({ label: 'Halt Duration', value: `${data.haltDuration} seconds` });
         if (data.time) details.push({ label: 'Time', value: data.time });
+        
+        // Additional information
+        if (data.distanceTraveled) details.push({ label: 'Distance Traveled', value: `${data.distanceTraveled} km` });
+        if (data.platform) details.push({ label: 'Platform', value: data.platform });
+        if (data.journeyCompleted) details.push({ label: 'Journey Completed', value: data.journeyCompleted ? 'Yes' : 'No' });
+        if (data.totalStations) details.push({ label: 'Total Stations', value: data.totalStations });
         
         return details;
     }
@@ -1033,11 +1115,25 @@ class EventManager {
         if (data.trainNumber) details.push({ label: 'Train Number', value: data.trainNumber });
         if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
         if (data.status) details.push({ label: 'Status', value: data.status });
+        if (data.eventType) details.push({ label: 'Event Type', value: data.eventType.replace(/_/g, ' ') });
+        
+        // Station information
+        if (data.stationName) details.push({ label: 'Station', value: data.stationName });
+        if (data.stationCode) details.push({ label: 'Station Code', value: data.stationCode });
         if (data.currentStationName) details.push({ label: 'Current Station', value: data.currentStationName });
         if (data.previousStationName) details.push({ label: 'Previous Station', value: data.previousStationName });
         if (data.nextStationName) details.push({ label: 'Next Station', value: data.nextStationName });
-        if (data.distanceTraveled) details.push({ label: 'Distance Traveled', value: `${data.distanceTraveled} km` });
+        
+        // Timing information
+        if (data.arrivalTime) details.push({ label: 'Arrival Time', value: new Date(data.arrivalTime).toLocaleString() });
+        if (data.departureTime) details.push({ label: 'Departure Time', value: new Date(data.departureTime).toLocaleString() });
+        if (data.stopTime) details.push({ label: 'Stop Time', value: new Date(data.stopTime).toLocaleString() });
+        if (data.haltDuration) details.push({ label: 'Halt Duration', value: `${data.haltDuration} seconds` });
         if (data.time) details.push({ label: 'Time', value: data.time });
+        
+        // Additional information
+        if (data.distanceTraveled) details.push({ label: 'Distance Traveled', value: `${data.distanceTraveled} km` });
+        if (data.platform) details.push({ label: 'Platform', value: data.platform });
         
         return details;
     }
@@ -1048,11 +1144,28 @@ class EventManager {
     generateAlertEventDetails(data) {
         const details = [];
         
-        if (data.type) details.push({ label: 'Alert Type', value: data.type.replace(/_/g, ' ') });
+        // Map alert types to user-friendly names
+        const alertTypeMap = {
+            'water_tank': 'Water Tank',
+            'breakdown': 'Breakdown',
+            'ac_malfunction': 'AC Malfunction',
+            'emergency': 'Emergency'
+        };
+        
+        if (data.type) {
+            const friendlyAlertType = alertTypeMap[data.type] || data.type.replace(/_/g, ' ');
+            details.push({ label: 'Alert Type', value: friendlyAlertType });
+        }
         if (data.trainNumber) details.push({ label: 'Train Number', value: data.trainNumber });
         if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
-        if (data.previousStation) details.push({ label: 'Previous Station', value: `${data.previousStation} - ${data.previousStationName}` });
-        if (data.nextStation) details.push({ label: 'Next Station', value: `${data.nextStation} - ${data.nextStationName}` });
+        if (data.coachNumber) details.push({ label: 'Coach Number', value: data.coachNumber });
+        
+        // Station information
+        if (data.stationName) details.push({ label: 'Station', value: data.stationName });
+        if (data.stationCode) details.push({ label: 'Station Code', value: data.stationCode });
+        if (data.previousStation) details.push({ label: 'Previous Station', value: `${data.previousStation} - ${data.previousStationName || 'Unknown'}` });
+        if (data.nextStation) details.push({ label: 'Next Station', value: `${data.nextStation} - ${data.nextStationName || 'Unknown'}` });
+        if (data.currentStation) details.push({ label: 'Current Station', value: `${data.currentStation} - ${data.currentStationName || 'Unknown'}` });
         
         // Show additional info for re-raised alerts
         if (data.reason === 'alert_moved_from_previous_station' && data.movedFromName) {
@@ -1060,6 +1173,7 @@ class EventManager {
             details.push({ label: 'Reason', value: 'Alert moved from previous station' });
         }
         
+        // Location and timing
         if (data.distanceTraveled) details.push({ label: 'Distance Traveled', value: `${data.distanceTraveled} km` });
         if (data.lat && data.lon) details.push({ label: 'Location', value: `${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}` });
         if (data.raisedTime) details.push({ label: 'Original Alert Time', value: new Date(data.raisedTime).toLocaleString() });
@@ -1074,6 +1188,7 @@ class EventManager {
         if (data.type) details.push({ label: 'Alert Type', value: data.type.replace(/_/g, ' ') });
         if (data.trainNumber) details.push({ label: 'Train Number', value: data.trainNumber });
         if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
+        if (data.coachNumber) details.push({ label: 'Coach Number', value: data.coachNumber });
         if (data.missedStation) details.push({ label: 'Missed Station', value: `${data.missedStation} - ${data.missedStationName}` });
         if (data.nextStation) details.push({ label: 'Moved To Station', value: `${data.nextStation} - ${data.nextStationName}` });
         if (data.reason) details.push({ label: 'Reason', value: data.reason.replace(/_/g, ' ') });
@@ -1091,6 +1206,7 @@ class EventManager {
         if (data.type) details.push({ label: 'Alert Type', value: data.type.replace(/_/g, ' ') });
         if (data.trainNumber) details.push({ label: 'Train Number', value: data.trainNumber });
         if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
+        if (data.coachNumber) details.push({ label: 'Coach Number', value: data.coachNumber });
         if (data.stationCode) details.push({ label: 'Served At Station', value: `${data.stationCode} - ${data.stationName}` });
         if (data.servedBy) details.push({ label: 'Served By', value: data.servedBy.replace(/_/g, ' ') });
         if (data.raisedTime) details.push({ label: 'Original Alert Time', value: new Date(data.raisedTime).toLocaleString() });
@@ -1105,6 +1221,7 @@ class EventManager {
         if (data.type) details.push({ label: 'Alert Type', value: data.type.replace(/_/g, ' ') });
         if (data.trainNumber) details.push({ label: 'Train Number', value: data.trainNumber });
         if (data.trainName) details.push({ label: 'Train Name', value: data.trainName });
+        if (data.coachNumber) details.push({ label: 'Coach Number', value: data.coachNumber });
         if (data.unservedStation) details.push({ label: 'Unserved At Station', value: `${data.unservedStation} - ${data.unservedStationName}` });
         if (data.reason) details.push({ label: 'Reason', value: data.reason.replace(/_/g, ' ') });
         if (data.raisedTime) details.push({ label: 'Original Alert Time', value: new Date(data.raisedTime).toLocaleString() });
