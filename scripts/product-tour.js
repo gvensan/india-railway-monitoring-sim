@@ -341,8 +341,7 @@ class ProductTour {
                     '🔍 Filter buttons: All, Train, Station, Alert'
                 ],
                 position: 'center',
-                waitFor: () => this.waitForEventsPanelOpen(),
-                onExit: () => this.restoreEventPublishingState()
+                waitFor: () => this.waitForEventsPanelOpen()
             },
             {
                 id: 'alert-system',
@@ -358,7 +357,8 @@ class ProductTour {
                     '📍 Alert flags appear on map at stations',
                     '📤 Alert events published to broker when enabled'
                 ],
-                position: 'center'
+                position: 'center',
+                onEnter: () => this.restoreEventPublishingState()
             },
             {
                 id: 'about-button',
@@ -570,9 +570,11 @@ class ProductTour {
             const targetElement = document.querySelector(step.target);
             if (targetElement) {
                 // Wait longer for DOM to settle, especially for panel transitions
+                // Use longer delay for sidebar panels that need to open
+                const delay = (step.id === 'events-panel') ? 800 : 300;
                 setTimeout(() => {
                     this.highlightElement(targetElement);
-                }, 300);
+                }, delay);
             } else {
                 this.highlight.style.display = 'none';
             }
