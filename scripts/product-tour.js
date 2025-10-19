@@ -326,8 +326,7 @@ class ProductTour {
                     '🧹 Auto-clean feature to limit events to 100'
                 ],
                 position: 'center',
-                onEnter: () => this.temporarilyEnableEventPublishing(),
-                onExit: () => this.restoreEventPublishingState()
+                onEnter: () => this.temporarilyEnableEventPublishing()
             },
             {
                 id: 'events-panel',
@@ -591,6 +590,8 @@ class ProductTour {
         const padding = this.config.highlightPadding;
         
         console.log(`🎯 Tour: Highlighting element:`, element, 'Rect:', rect);
+        console.log(`🎯 Tour: Element ID:`, element.id, 'Element class:', element.className);
+        console.log(`🎯 Tour: Element visible:`, element.offsetWidth > 0 && element.offsetHeight > 0);
         
         // For sidebar panels, ensure we cover the entire visible area
         let highlightRect = {
@@ -632,6 +633,13 @@ class ProductTour {
         this.highlight.style.top = highlightRect.top + 'px';
         this.highlight.style.width = highlightRect.width + 'px';
         this.highlight.style.height = highlightRect.height + 'px';
+        
+        console.log(`🎯 Tour: Highlight positioned at:`, {
+            left: highlightRect.left,
+            top: highlightRect.top,
+            width: highlightRect.width,
+            height: highlightRect.height
+        });
         
     }
     
@@ -974,6 +982,8 @@ class ProductTour {
         this.tourChangedEventPublishing = false;
         this.tourOpenedEventsSidebar = false;
         
+        console.log('🎯 Tour: Starting event publishing setup, original state:', this.originalPublishEventsState);
+        
         // Temporarily enable event publishing if it was disabled
         if (!window.publishEvents) {
             window.publishEvents = true;
@@ -988,13 +998,18 @@ class ProductTour {
             console.log('🎯 Tour: Temporarily enabled event publishing for demonstration');
         }
         
-        // Automatically open the events sidebar
-        const eventsFloatingBtn = document.getElementById('eventsFloatingBtn');
-        if (eventsFloatingBtn) {
-            eventsFloatingBtn.click();
-            this.tourOpenedEventsSidebar = true;
-            console.log('🎯 Tour: Automatically opened events sidebar for demonstration');
-        }
+        // Automatically open the events sidebar with a small delay
+        setTimeout(() => {
+            const eventsFloatingBtn = document.getElementById('eventsFloatingBtn');
+            if (eventsFloatingBtn) {
+                console.log('🎯 Tour: Clicking events floating button to open sidebar');
+                eventsFloatingBtn.click();
+                this.tourOpenedEventsSidebar = true;
+                console.log('🎯 Tour: Automatically opened events sidebar for demonstration');
+            } else {
+                console.error('🎯 Tour: Events floating button not found!');
+            }
+        }, 100);
     }
 
     /**
