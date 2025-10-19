@@ -325,7 +325,9 @@ class ProductTour {
                     '📝 Detailed event information with timestamps',
                     '🧹 Auto-clean feature to limit events to 100'
                 ],
-                position: 'center'
+                position: 'center',
+                onEnter: () => this.temporarilyEnableEventPublishing(),
+                onExit: () => this.restoreEventPublishingState()
             },
             {
                 id: 'events-panel',
@@ -339,7 +341,8 @@ class ProductTour {
                     '🔍 Filter buttons: All, Train, Station, Alert'
                 ],
                 position: 'center',
-                waitFor: () => this.waitForEventsPanelOpen()
+                waitFor: () => this.waitForEventsPanelOpen(),
+                onExit: () => this.restoreEventPublishingState()
             },
             {
                 id: 'alert-system',
@@ -475,6 +478,9 @@ class ProductTour {
     close() {
         if (!this.isActive) return;
         
+        // Call onExit callback for current step if it exists
+        this.callCurrentStepOnExit();
+        
         // console.log('🔧 Closing tour - removing elements dynamically...');
         
         this.isActive = false;
@@ -515,6 +521,9 @@ class ProductTour {
     }
     
     next() {
+        // Call onExit callback for current step if it exists
+        this.callCurrentStepOnExit();
+        
         if (this.currentStep < this.steps.length - 1) {
             this.currentStep++;
             this.showStep(this.currentStep);
@@ -524,6 +533,9 @@ class ProductTour {
     }
     
     previous() {
+        // Call onExit callback for current step if it exists
+        this.callCurrentStepOnExit();
+        
         if (this.currentStep > 0) {
             this.currentStep--;
             this.showStep(this.currentStep);
@@ -548,6 +560,11 @@ class ProductTour {
     }
     
     displayStep(step, stepIndex) {
+        // Call onEnter callback if it exists
+        if (step.onEnter && typeof step.onEnter === 'function') {
+            step.onEnter();
+        }
+        
         // Position highlight
         if (step.target) {
             const targetElement = document.querySelector(step.target);
@@ -944,6 +961,78 @@ class ProductTour {
     resetAndShow() {
         this.resetTourState();
         this.showTriggerButton();
+    }
+
+    /**
+     * Temporarily enable event publishing and open events sidebar for tour demonstration
+     */
+    temporarilyEnableEventPublishing() {
+        // Store the original state
+        this.originalPublishEventsState = window.publishEvents;
+        this.tourChangedEventPublishing = false;
+        this.tourOpenedEventsSidebar = false;
+        
+        // Temporarily enable event publishing if it was disabled
+        if (!window.publishEvents) {
+            window.publishEvents = true;
+            this.tourChangedEventPublishing = true;
+            
+            // Update the checkbox to reflect the change
+            const publishEventsCheckbox = document.getElementById('publishEventsCheckbox');
+            if (publishEventsCheckbox) {
+                publishEventsCheckbox.checked = true;
+            }
+            
+            console.log('🎯 Tour: Temporarily enabled event publishing for demonstration');
+        }
+        
+        // Automatically open the events sidebar
+        const eventsFloatingBtn = document.getElementById('eventsFloatingBtn');
+        if (eventsFloatingBtn) {
+            eventsFloatingBtn.click();
+            this.tourOpenedEventsSidebar = true;
+            console.log('🎯 Tour: Automatically opened events sidebar for demonstration');
+        }
+    }
+
+    /**
+     * Call onExit callback for current step if it exists
+     */
+    callCurrentStepOnExit() {
+        const currentStep = this.steps[this.currentStep];
+        if (currentStep && currentStep.onExit && typeof currentStep.onExit === 'function') {
+            currentStep.onExit();
+        }
+    }
+
+    /**
+     * Restore the original event publishing state and close events sidebar if needed
+     */
+    restoreEventPublishingState() {
+        // Only restore if the tour actually changed the state
+        if (this.tourChangedEventPublishing && this.originalPublishEventsState !== undefined) {
+            window.publishEvents = this.originalPublishEventsState;
+            
+            // Update the checkbox to reflect the original state
+            const publishEventsCheckbox = document.getElementById('publishEventsCheckbox');
+            if (publishEventsCheckbox) {
+                publishEventsCheckbox.checked = this.originalPublishEventsState;
+            }
+            
+            console.log('🎯 Tour: Restored event publishing state to:', this.originalPublishEventsState);
+        }
+        
+        // Close the events sidebar if it was opened by the tour
+        if (this.tourOpenedEventsSidebar) {
+            const leftSidebar = document.getElementById('leftSidebar');
+            if (leftSidebar && leftSidebar.classList.contains('open')) {
+                const closeLeftSidebarBtn = document.getElementById('closeLeftSidebarBtn');
+                if (closeLeftSidebarBtn) {
+                    closeLeftSidebarBtn.click();
+                    console.log('🎯 Tour: Closed events sidebar after demonstration');
+                }
+            }
+        }
     }
 }
 
