@@ -36,22 +36,22 @@ class ProductTour {
     createTourElements() {
         // Don't create elements here - they will be created dynamically when tour starts
         // This prevents any interference with marker interactions when tour is not active
-        console.log('🔧 Tour elements will be created dynamically when tour starts');
+        // console.log('🔧 Tour elements will be created dynamically when tour starts');
     }
     
     createDynamicTourElements() {
-        console.log('🔧 Creating tour elements dynamically...');
+        // console.log('🔧 Creating tour elements dynamically...');
         
         // Create overlay only when tour starts
         this.overlay = document.createElement('div');
         this.overlay.className = 'tour-overlay';
-        this.overlay.style.pointerEvents = 'auto'; // Enable pointer events only when tour is active
+        this.overlay.style.pointerEvents = 'none'; // Allow pointer events to pass through to highlight
         document.body.appendChild(this.overlay);
         
-        // Create highlight element
+        // Create highlight element - append to body for better visibility
         this.highlight = document.createElement('div');
         this.highlight.className = 'tour-highlight';
-        this.overlay.appendChild(this.highlight);
+        document.body.appendChild(this.highlight);
         
         // Create tooltip - append directly to body to avoid overlay interference
         this.tooltip = document.createElement('div');
@@ -99,16 +99,22 @@ class ProductTour {
         // Set up event listeners for the dynamically created elements
         this.setupDynamicEventListeners();
         
-        console.log('✅ Tour elements created dynamically');
+        // console.log('✅ Tour elements created dynamically');
     }
     
     removeDynamicTourElements() {
-        console.log('🔧 Removing tour elements dynamically...');
+        // console.log('🔧 Removing tour elements dynamically...');
         
         // Remove overlay
         if (this.overlay && this.overlay.parentNode) {
             this.overlay.parentNode.removeChild(this.overlay);
             this.overlay = null;
+        }
+        
+        // Remove highlight
+        if (this.highlight && this.highlight.parentNode) {
+            this.highlight.parentNode.removeChild(this.highlight);
+            this.highlight = null;
         }
         
         // Remove tooltip
@@ -123,10 +129,7 @@ class ProductTour {
             this.completionDialog = null;
         }
         
-        // Reset highlight
-        this.highlight = null;
-        
-        console.log('✅ Tour elements removed dynamically');
+        // console.log('✅ Tour elements removed dynamically');
     }
     
     createTriggerButton() {
@@ -214,15 +217,15 @@ class ProductTour {
                 arrow: null
             },
             {
-                id: 'map-tour-button',
-                target: '.tour-zoom-btn',
-                title: '🗺️ Interactive Map & Tour Access',
-                description: 'This is the main map view with integrated tour controls. You can see trains moving in real-time and access the tour anytime.',
+                id: 'map-overview',
+                target: null,
+                title: '🗺️ Interactive Map Overview',
+                description: 'This is the main map view where you can see trains moving in real-time. The map shows railway infrastructure, station markers, and train positions.',
                 features: [
                     'Real-time train positions and movement trails',
                     'Station markers with detailed information',
                     'Railway infrastructure overlay',
-                    'Tour button integrated into zoom controls'
+                    'Interactive train and station tooltips'
                 ],
                 position: 'center'
             },
@@ -248,7 +251,8 @@ class ProductTour {
                     '▶️ Play: Start the train simulation',
                     '⏸️ Pause: Temporarily stop simulation',
                     '⏹️ Stop: Reset to starting position',
-                    '🎚️ Speed slider: Adjust from 1x to 10x speed'
+                    '🎚️ Speed slider: Adjust from 1x to 10x speed',
+                    '📤 Publish Events: Toggle event publishing to broker'
                 ],
                 position: 'center',
                 waitFor: () => this.waitForSidebarOpen()
@@ -280,6 +284,21 @@ class ProductTour {
                 ],
                 position: 'center',
                 waitFor: () => this.waitForSidebarOpen()
+            },
+            {
+                id: 'multi-train-mode',
+                target: null,
+                title: '🚂 Multi-Train Mode',
+                description: 'The system supports monitoring multiple trains simultaneously. Switch to multi-train mode to see hundreds of trains moving across the railway network.',
+                features: [
+                    '🚂 Monitor 300+ trains simultaneously',
+                    '📍 Real-time position tracking for all trains',
+                    '🎮 Centralized simulation controls',
+                    '📊 Aggregate statistics and progress tracking',
+                    '📤 Bulk event publishing to broker',
+                    '🔄 Independent train lifecycle management'
+                ],
+                position: 'center'
             },
             {
                 id: 'quick-actions',
@@ -323,33 +342,20 @@ class ProductTour {
                 waitFor: () => this.waitForEventsPanelOpen()
             },
             {
-                id: 'alert-button',
-                target: '#alertFloatingBtn',
-                title: '⚠️ Alert Management',
-                description: 'Click this button to access alert controls. Raise alerts for train issues like water tank problems, breakdowns, or AC malfunctions.',
+                id: 'alert-system',
+                target: null,
+                title: '⚠️ Alert System',
+                description: 'The system includes an integrated alert management system. Alerts can be raised for trains and are automatically managed through the event system.',
                 features: [
-                    '💧 Water tank alerts for service needs',
-                    '🔧 Breakdown alerts for mechanical issues',
-                    '❄️ AC malfunction alerts for comfort issues',
-                    '🚨 Emergency alerts for critical situations'
-                ],
-                position: 'center'
-            },
-            {
-                id: 'alert-panel',
-                target: '#alertBottomPanel',
-                title: '⚠️ Alert Controls',
-                description: 'Generate alerts for specific trains. Click any train icon to raise different types of alerts. Alerts appear as flags on the map at the next station.',
-                features: [
-                    '🚂 Click train icons to raise alerts',
+                    '🚂 Train-based alert generation',
                     '💧 Water tank alerts for service needs',
                     '🔧 Breakdown alerts for mechanical issues',
                     '❄️ AC malfunction alerts for comfort issues',
                     '🚨 Emergency alerts for critical situations',
-                    '📍 Alert flags appear on map at next station'
+                    '📍 Alert flags appear on map at stations',
+                    '📤 Alert events published to broker when enabled'
                 ],
-                position: 'center',
-                waitFor: () => this.waitForAlertPanelOpen()
+                position: 'center'
             },
             {
                 id: 'about-button',
@@ -444,7 +450,7 @@ class ProductTour {
     start() {
         if (this.isActive) return;
         
-        console.log('🔧 Starting tour - creating elements dynamically...');
+        // console.log('🔧 Starting tour - creating elements dynamically...');
         
         this.isActive = true;
         this.currentStep = 0;
@@ -456,24 +462,28 @@ class ProductTour {
         this.overlay.classList.add('active');
         this.triggerButton.classList.add('hidden');
         
+        
         // Hide any open panels initially
         this.closeAllPanels();
         
         this.showStep(0);
         this.saveTourState('started');
         
-        console.log('✅ Tour started with dynamic elements');
+        // console.log('✅ Tour started with dynamic elements');
     }
     
     close() {
         if (!this.isActive) return;
         
-        console.log('🔧 Closing tour - removing elements dynamically...');
+        // console.log('🔧 Closing tour - removing elements dynamically...');
         
         this.isActive = false;
         
         // Clean up any waiting states
         this.clearWaitingStates();
+        
+        // Close all panels to return to default app state
+        this.closeAllPanels();
         
         // Remove tour elements completely from DOM
         this.removeDynamicTourElements();
@@ -483,7 +493,7 @@ class ProductTour {
         
         this.saveTourState('completed');
         
-        console.log('✅ Tour closed and elements removed from DOM');
+        // console.log('✅ Tour closed and elements removed from DOM');
     }
     
     completeTour() {
@@ -561,6 +571,8 @@ class ProductTour {
         const rect = element.getBoundingClientRect();
         const padding = this.config.highlightPadding;
         
+        console.log(`🎯 Tour: Highlighting element:`, element, 'Rect:', rect);
+        
         // For sidebar panels, ensure we cover the entire visible area
         let highlightRect = {
             top: rect.top - padding,
@@ -601,6 +613,7 @@ class ProductTour {
         this.highlight.style.top = highlightRect.top + 'px';
         this.highlight.style.width = highlightRect.width + 'px';
         this.highlight.style.height = highlightRect.height + 'px';
+        
     }
     
     createTooltip(step, stepIndex) {
@@ -825,31 +838,7 @@ class ProductTour {
         });
     }
     
-    waitForAlertPanelOpen() {
-        return new Promise((resolve) => {
-            const panel = document.getElementById('alertBottomPanel');
-            if (panel && panel.classList.contains('open')) {
-                resolve();
-                return;
-            }
-            
-            // Open alert panel if not already open
-            const alertBtn = document.getElementById('alertFloatingBtn');
-            if (alertBtn) {
-                alertBtn.click();
-            }
-            
-            // Wait for panel to open
-            const checkPanel = () => {
-                if (panel && panel.classList.contains('open')) {
-                    resolve();
-                } else {
-                    setTimeout(checkPanel, 100);
-                }
-            };
-            checkPanel();
-        });
-    }
+    // Alert panel functionality removed - no longer needed
     
     waitForCondition(condition, callback) {
         if (typeof condition === 'function') {
@@ -905,7 +894,7 @@ class ProductTour {
         try {
             localStorage.setItem('train-monitoring-tour-state', state);
         } catch (e) {
-            console.warn('Could not save tour state:', e);
+            // console.warn('Could not save tour state:', e);
         }
     }
     
@@ -915,7 +904,7 @@ class ProductTour {
             // Map tour button is always visible, floating button is hidden by default
             // No need to show/hide based on tour completion state
         } catch (e) {
-            console.warn('Could not load tour state:', e);
+            // console.warn('Could not load tour state:', e);
         }
     }
     
@@ -930,7 +919,7 @@ class ProductTour {
                 tourBtn.style.display = 'block';
             }
         } catch (e) {
-            console.warn('Could not reset tour state:', e);
+            // console.warn('Could not reset tour state:', e);
         }
     }
     

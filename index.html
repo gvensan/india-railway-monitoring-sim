@@ -29,10 +29,6 @@
             <img src="assets/images/events.png" alt="Events" />
         </button>
         
-        <!-- Alert floating button in bottom right -->
-        <button id="alertFloatingBtn" class="alert-floating-btn" title="Alert Controls">
-            <img src="assets/images/alertcontrol.png" alt="Alert Controls" />
-        </button>
         
         <div id="rightSidebar" class="right-sidebar">
         <div class="header">
@@ -48,24 +44,16 @@
         </div>
 
             <div class="control-sections-container">
-            <div class="control-section">
-                <div class="realtime-section">
-                    <div class="realtime-toggle">
-                        <input type="checkbox" id="realtimeCheckbox" class="toggle-checkbox">
-                        <label for="realtimeCheckbox" class="toggle-label">
-                            <span class="toggle-text">Real-time</span>
-                        </label>
-                    </div>
-                    <div id="timeControls" class="time-controls" style="display: none;">
-                        <span id="currentTime">00:00</span>
-                        <button id="timeChooserBtn" class="time-chooser-btn" title="Choose time">🕐</button>
-                        <input type="number" id="timeIncrement" class="time-increment-input" min="0" max="30" value="1" step="1" disabled>
-                    </div>
-                </div>
-            </div>
+            <!-- Real-time controls removed for simplified UI -->
 
             <div class="control-section">
-                <h3>Simulation Controls</h3>
+                <div class="section-header">
+                    <h3>Simulation Controls</h3>
+                    <div class="publish-events-control">
+                        <input type="checkbox" id="publishEventsCheckbox" class="publish-events-checkbox">
+                        <label for="publishEventsCheckbox">Publish Events</label>
+                    </div>
+                </div>
                 <div class="controls">
                     <button id="playBtn" class="btn btn-primary">▶️ Play</button>
                     <button id="pauseBtn" class="btn btn-secondary">⏸️ Pause</button>
@@ -84,6 +72,37 @@
             <div class="control-section">
                 <h3>Train Information</h3>
                 <div class="info-display">
+                    <!-- Multi-train stats (visible in multi mode; values updated by MultiTrainUIControls.updateMultiStats) -->
+                    <div id="multi-stats" style="display: none;">
+                    <div class="info-item">
+                        <span class="info-label">No of Trains:</span>
+                        <span class="info-value" id="multi-total-trains">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Status:</span>
+                        <span class="info-value" id="multi-status">Not Started</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">No of Trains at Destination:</span>
+                        <span class="info-value" id="multi-arrived">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">No of Trains Running:</span>
+                        <span class="info-value" id="multi-running">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Alerts Raised:</span>
+                        <span class="info-value" id="multi-alerts-raised">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Alerts Served:</span>
+                        <span class="info-value" id="multi-alerts-served">-</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Alerts Unserved:</span>
+                        <span class="info-value" id="multi-alerts-unserved">-</span>
+                    </div>
+                    </div>
                     <div class="info-item">
                         <span class="info-label">Train Number:</span>
                         <span class="info-value" id="train-number">-</span>
@@ -213,23 +232,65 @@
         </div>
     </div>
     
-    <!-- Alert bottom panel -->
-    <div id="alertBottomPanel" class="alert-bottom-panel">
-        <div class="alert-bottom-panel-header">
-            <h2>Alert Controls</h2>
-            <button id="closeAlertPanelBtn" class="close-alert-panel-btn" title="Close Alert Controls">
-                <img src="assets/images/alertcontrol.png" alt="Alert Controls" />
-            </button>
-        </div>
-        <div class="alert-bottom-panel-content">
-            <div class="train-icons-grid" id="trainIconsGrid">
-                <!-- Train icons will be dynamically generated here -->
-            </div>
-        </div>
-    </div>
+        
 
     <!-- Leaflet JavaScript -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <!-- Disable verbose logs in production/simulation to reduce overhead -->
+    <script>
+        (function () {
+            try {
+                // Add temporary debug flag for station status classification logs
+                window.SHOW_STATION_STATUS_DEBUG = true;
+                // Controls for random alert processing in multi-train mode
+                // Probability [0..1] an alert is marked served at a station
+                window.MULTI_ALERT_SERVE_PROB = 0.5; // default 50%
+                // Probability [0..1] a raised alert is sticky and rides to destination unserved
+                window.MULTI_ALERT_STICKY_PROB = 0.1; // default 10%
+                // Performance toggles
+                window.MULTI_SHOW_TRAIN_HINTS = true; // show train number hints in multi-train by default
+                // In-memory broker perf flags removed (use defaults)
+                delete window.BROKER_BATCH_DELIVERY;
+                delete window.BROKER_LIMIT_HISTORY;
+                delete window.BROKER_BATCH_LIMIT;
+                const NOISY = ['log', 'debug'];
+                NOISY.forEach(fn => {
+                    if (console && typeof console[fn] === 'function') {
+                        console[fn] = function () {};
+                    }
+                });
+                // Handle tab visibility: auto-pause on hide, auto-resume on show (if previously running)
+                document.addEventListener('visibilitychange', () => {
+                    try {
+                        const tm = window.trainMonitorInstance;
+                        const mts = window.multiTrainSystem;
+                        if (document.hidden) {
+                            // Cache running states and pause
+                            if (tm) {
+                                tm.__wasRunningBeforeHide = !!tm.isRunning && !tm.isPaused;
+                                if (tm.__wasRunningBeforeHide) tm.pause();
+                            }
+                            if (mts && mts.isRunning && mts.simulationEngine && !mts.simulationEngine.isPaused) {
+                                mts.__wasRunningBeforeHide = true;
+                                mts.pause();
+                            }
+                        } else {
+                            // Resume only if it was running before hide
+                            if (tm && tm.__wasRunningBeforeHide) {
+                                tm.__wasRunningBeforeHide = false;
+                                tm.play();
+                            }
+                            if (mts && mts.__wasRunningBeforeHide) {
+                                mts.__wasRunningBeforeHide = false;
+                                mts.resume();
+                            }
+                        }
+                    } catch (e) {}
+                });
+            } catch (e) { /* ignore */ }
+        })();
+    </script>
     
     <!-- Solace JS API -->
     <script src="scripts/solclient.js"></script>
@@ -259,26 +320,35 @@
     <script src="scripts/solace-integration-module.js"></script>
     
     <!-- Tooltip System Module -->
-    <script src="scripts/tooltip-system.js"></script>
+    <script src="scripts/single/s-tooltip-system.js"></script>
     
-    <!-- Multi-Train Manager Module -->
-    <script src="scripts/multi-train-manager.js"></script>
-    
+    <!-- New refactored architecture -->
+    <script src="scripts/single/s-train.js"></script>
+    <!-- Multi-train simulation manager moved to scripts/multi/ -->
+    <script src="scripts/single/s-simulation-engine.js"></script>
+        
     <!-- Real-Time Monitor Module -->
-    <script src="scripts/realtime-monitor.js"></script>
+    <!-- Multi-train realtime monitor moved to scripts/multi/ -->
+    
+    <!-- Independent Multi-Train System -->
+    <script src="scripts/multi/m-multi-train-data-manager.js"></script>
+    <script src="scripts/multi/m-multi-train-manager.js"></script>
+    <script src="scripts/multi/m-multi-simulation-engine.js"></script>
+    <script src="scripts/multi/m-multi-train-ui-controls.js"></script>
+    <script src="scripts/multi/m-multi-train-system.js"></script>
     
     <!-- Alert System Module -->
     <script src="scripts/alert-system.js"></script>
     
     <!-- UI Controls Module -->
-    <script src="scripts/ui-controls.js"></script>
+    <script src="scripts/single/s-ui-controls.js"></script>
     
     <!-- Train Data Manager Module -->
-    <script src="scripts/train-data-manager.js"></script>
-    <script src="scripts/train-simulation.js"></script>
+    <script src="scripts/single/s-train-data-manager.js"></script>
+    <script src="scripts/single/s-train-simulation.js"></script>
     
     <!-- Train Monitoring JavaScript -->
-    <script src="scripts/train-monitoring.js"></script>
+    <script src="scripts/single/s-train-monitoring.js"></script>
     
     <!-- Product Tour JavaScript -->
     <script src="scripts/product-tour.js"></script>
@@ -388,7 +458,7 @@
                   <p><strong>Version:</strong> 2.0.0 | <strong>Last Updated:</strong> September 2025</p>
                   <p>Built with ❤️ for Indian Railways monitoring and simulation</p>
                   <p style="margin-top: 12px; padding: 8px; background: rgba(102, 126, 234, 0.1); border-radius: 6px; font-size: 13px;">
-                      <strong>🎯 New to the system?</strong> Click the tour button in the map's zoom controls (between + and -) to take an interactive walkthrough of all features!
+                      <strong>🎯 New to the system?</strong> Look for the "Take Tour" button that appears on the page to take an interactive walkthrough of all features!
                   </p>
               </div>
             
@@ -456,5 +526,22 @@
             </div>
         </div>
     </div>
+
+    <!-- Publish Events Control -->
+    <script>
+        // Initialize publish events flag (default: false/unchecked)
+        window.publishEvents = false;
+        
+        // Add event listener for publish events checkbox
+        document.addEventListener('DOMContentLoaded', function() {
+            const publishEventsCheckbox = document.getElementById('publishEventsCheckbox');
+            if (publishEventsCheckbox) {
+                publishEventsCheckbox.addEventListener('change', function() {
+                    window.publishEvents = this.checked;
+                    console.log('Publish Events:', window.publishEvents ? 'Enabled' : 'Disabled');
+                });
+            }
+        });
+    </script>
 </body>
 </html>

@@ -16,7 +16,7 @@
 .tour-overlay.active {
     opacity: 0.5;
     visibility: visible;
-    pointer-events: auto; /* Enable pointer events only when tour is active */
+    pointer-events: none; /* Allow pointer events to pass through to highlight */
 }
 
 .tour-highlight {
@@ -28,6 +28,7 @@
     z-index: 10001;
     transition: all 0.3s ease;
     animation: tourPulse 2s infinite;
+    pointer-events: none; /* Allow clicks to pass through to underlying elements */
 }
 
 @keyframes tourPulse {

@@ -12,8 +12,12 @@ class InMemoryBroker {
         this.messageHandlers = new Map();
         this.messageHistory = new Map();
         this.maxHistoryPerTopic = 100; // Keep last 100 messages per topic
+        // Optional delivery batching (feature-flagged) - will be disabled by default
+        this._deliveryQueue = [];
+        this._deliveryScheduled = false;
+        this._deliveryBatchLimit = 200; // max callbacks per frame when batching
         
-        console.log('🧠 InMemoryBroker initialized');
+        // console.log('🧠 InMemoryBroker initialized');
     }
 
     /**
@@ -21,12 +25,12 @@ class InMemoryBroker {
      */
     async connect() {
         return new Promise((resolve) => {
-            console.log('🔄 Connecting to in-memory broker...');
+            // console.log('🔄 Connecting to in-memory broker...');
             
             // Simulate connection delay
             setTimeout(() => {
                 this.isConnected = true;
-                console.log('✅ Connected to in-memory broker successfully');
+                // console.log('✅ Connected to in-memory broker successfully');
                 resolve();
             }, 100);
         });
@@ -54,10 +58,10 @@ class InMemoryBroker {
             // Notify subscribers
             this.notifySubscribers(topic, payload, message);
 
-            console.log('📤 Published message to in-memory broker:', topic, payload);
+            // console.log('📤 Published message to in-memory broker:', topic, payload);
             
         } catch (error) {
-            console.error('❌ Failed to publish message to in-memory broker:', error);
+            // console.error('❌ Failed to publish message to in-memory broker:', error);
             throw error;
         }
     }
@@ -75,13 +79,13 @@ class InMemoryBroker {
             this.subscriptions.add(topic);
             this.messageHandlers.set(topic, messageHandler);
             
-            console.log('📥 Subscribed to in-memory broker topic:', topic);
+            // console.log('📥 Subscribed to in-memory broker topic:', topic);
             
             // Send recent message history to new subscriber
             this.sendMessageHistory(topic, messageHandler);
             
         } catch (error) {
-            console.error('❌ Failed to subscribe to in-memory broker topic:', topic, error);
+            // console.error('❌ Failed to subscribe to in-memory broker topic:', topic, error);
             throw error;
         }
     }
@@ -98,10 +102,10 @@ class InMemoryBroker {
             this.subscriptions.delete(topic);
             this.messageHandlers.delete(topic);
             
-            console.log('📤 Unsubscribed from in-memory broker topic:', topic);
+            // console.log('📤 Unsubscribed from in-memory broker topic:', topic);
             
         } catch (error) {
-            console.error('❌ Failed to unsubscribe from in-memory broker topic:', topic, error);
+            // console.error('❌ Failed to unsubscribe from in-memory broker topic:', topic, error);
             throw error;
         }
     }
@@ -112,13 +116,13 @@ class InMemoryBroker {
     async disconnect() {
         if (this.isConnected) {
             try {
-                console.log('🔄 Disconnecting from in-memory broker...');
+                // console.log('🔄 Disconnecting from in-memory broker...');
                 this.isConnected = false;
                 this.subscriptions.clear();
                 this.messageHandlers.clear();
-                console.log('✅ Disconnected from in-memory broker');
+                // console.log('✅ Disconnected from in-memory broker');
             } catch (error) {
-                console.error('❌ Error disconnecting from in-memory broker:', error);
+                // console.error('❌ Error disconnecting from in-memory broker:', error);
             }
         }
     }
@@ -157,14 +161,13 @@ class InMemoryBroker {
      */
     sendMessageHistory(topic, messageHandler) {
         const messages = this.messageHistory.get(topic) || [];
-        
-        // Send last 5 messages to new subscriber
+        // Restore original behavior: last 5 messages
         const recentMessages = messages.slice(-5);
         recentMessages.forEach(message => {
             try {
                 messageHandler(topic, message.payload, message);
             } catch (error) {
-                console.error('❌ Error sending message history:', error);
+                // console.error('❌ Error sending message history:', error);
             }
         });
     }
@@ -177,16 +180,17 @@ class InMemoryBroker {
         this.messageHandlers.forEach((handler, subscribedTopic) => {
             if (this.topicMatches(topic, subscribedTopic)) {
                 try {
-                    // Simulate async message delivery
+                    // Original behavior: async delivery per message
                     setTimeout(() => {
                         handler(topic, payload, message);
                     }, 10);
                 } catch (error) {
-                    console.error('❌ Error in message handler for topic', subscribedTopic, ':', error);
+                    // console.error('❌ Error in message handler for topic', subscribedTopic, ':', error);
                 }
             }
         });
     }
+
 
     /**
      * Check if a topic matches a subscription pattern
@@ -247,7 +251,7 @@ class InMemoryBroker {
         };
         
         await this.publish(topic, JSON.stringify(payload));
-        console.log(`🚂 Published train departed origin event to in-memory broker for train ${trainData.trainNumber}`);
+        // console.log(`🚂 Published train departed origin event to in-memory broker for train ${trainData.trainNumber}`);
     }
 
     /**
@@ -274,7 +278,7 @@ class InMemoryBroker {
         };
         
         await this.publish(topic, JSON.stringify(payload));
-        console.log(`🚂 Published train arrived destination event to in-memory broker for train ${trainData.trainNumber}`);
+        // console.log(`🚂 Published train arrived destination event to in-memory broker for train ${trainData.trainNumber}`);
     }
 
     /**
@@ -303,7 +307,7 @@ class InMemoryBroker {
         };
         
         await this.publish(topic, JSON.stringify(payload));
-        console.log(`🚂 Published train stopped at station event to in-memory broker for train ${trainData.trainNumber}`);
+        // console.log(`🚂 Published train stopped at station event to in-memory broker for train ${trainData.trainNumber}`);
     }
 
     /**
@@ -332,7 +336,7 @@ class InMemoryBroker {
         };
         
         await this.publish(topic, JSON.stringify(payload));
-        console.log(`🚂 Published train arrived at station event to in-memory broker for train ${trainData.trainNumber}`);
+        // console.log(`🚂 Published train arrived at station event to in-memory broker for train ${trainData.trainNumber}`);
     }
 
     /**
@@ -359,7 +363,7 @@ class InMemoryBroker {
         };
         
         await this.publish(topic, JSON.stringify(payload));
-        console.log(`🚂 Published train departed from station event to in-memory broker for train ${trainData.trainNumber}`);
+        // console.log(`🚂 Published train departed from station event to in-memory broker for train ${trainData.trainNumber}`);
     }
 
     /**

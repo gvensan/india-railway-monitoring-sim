@@ -94,7 +94,7 @@ function isHostedEnvironment() {
 function getDefaultBrokerConfig() {
     // If we're in a hosted environment, default to in-memory broker
     if (isHostedEnvironment()) {
-        console.log('🌐 Detected hosted environment, defaulting to in-memory broker');
+        // console.log('🌐 Detected hosted environment, defaulting to in-memory broker');
         return {
             brokerType: 'inmemory',
             url: 'ws://localhost:8008', // This won't be used for in-memory
@@ -119,7 +119,7 @@ function updateDefaultConfig(newConfig) {
     if (newConfig && typeof newConfig === 'object') {
         // Update the default configuration
         Object.assign(BROKER_CONFIG, newConfig);
-        console.log('✅ Default broker configuration updated:', BROKER_CONFIG);
+        // console.log('✅ Default broker configuration updated:', BROKER_CONFIG);
     }
 }
 
@@ -133,7 +133,7 @@ function getStoredBrokerConfig() {
             return JSON.parse(stored);
         }
     } catch (error) {
-        console.error('❌ Error reading stored broker configuration:', error);
+        // console.error('❌ Error reading stored broker configuration:', error);
     }
     return null;
 }

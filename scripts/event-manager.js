@@ -18,9 +18,26 @@ class EventManager {
         this.clearEventsBtn = document.getElementById('clearEventsBtn');
         this.filterBtns = document.querySelectorAll('.filter-btn');
         
-        this.initializeEventHandlers();
-        this.setupSolaceSubscriptions();
+    this.initializeEventHandlers();
+    this.subscriptionsInitialized = false; // avoid duplicate subscribes
+    this.setupSolaceSubscriptions();
     }
+
+  /**
+   * Lightweight audit logger for alerts; enabled when window.ALERT_AUDIT === true
+   */
+  logAlertAudit(message, data) {
+    try {
+      if (window && window.ALERT_AUDIT) {
+        // Use info (log/debug are disabled globally)
+        if (data !== undefined) {
+          console.info(`[ALERT_AUDIT] ${message}`, data);
+        } else {
+          console.info(`[ALERT_AUDIT] ${message}`);
+        }
+      }
+    } catch (_e) {}
+  }
 
     /**
      * Initialize event handlers for UI interactions
@@ -48,8 +65,10 @@ class EventManager {
     async setupSolaceSubscriptions() {
         // Wait for Solace to be available
         const checkSolace = () => {
-            if (window.solaceTrainMonitor && window.solaceTrainMonitor.isConnected) {
-                this.subscribeToEvents();
+      if (this.subscriptionsInitialized) return;
+      if (window.solaceTrainMonitor && window.solaceTrainMonitor.isConnected) {
+        this.subscribeToEvents();
+        this.subscriptionsInitialized = true;
             } else {
                 setTimeout(checkSolace, 1000);
             }
@@ -60,49 +79,50 @@ class EventManager {
     /**
      * Subscribe to all TMS events
      */
-    async subscribeToEvents() {
+  async subscribeToEvents() {
+    try { console.info('[EventManager] subscribeToEvents invoked'); } catch (_e) {}
         try {
-            console.log('🔄 Setting up event subscriptions...');
+            // // console.log('🔄 Setting up event subscriptions...');
             
             // Subscribe to train events
             await window.solaceTrainMonitor.subscribeToTrainEvents((topic, payload, message) => {
-                console.log('🚂 Train event received:', topic);
+                // // console.log('🚂 Train event received:', topic);
                 this.handleTrainEvent(topic, payload, message);
             });
 
             // Subscribe to station events
             await window.solaceTrainMonitor.subscribeToStationEvents((topic, payload, message) => {
-                console.log('🚉 Station event received:', topic);
+                // // console.log('🚉 Station event received:', topic);
                 this.handleStationEvent(topic, payload, message);
             });
 
             // Subscribe to alert raised events
             await window.solaceTrainMonitor.subscribe('tms/alert/raised/>', (topic, payload, message) => {
-                console.log('🚨 Alert raised event received:', topic);
+                // // console.log('🚨 Alert raised event received:', topic);
                 this.handleAlertRaisedEvent(topic, payload, message);
             });
 
             // Subscribe to alert missed events
             await window.solaceTrainMonitor.subscribe('tms/alert/missed/>', (topic, payload, message) => {
-                console.log('🚨 Alert missed event received:', topic);
+                // // console.log('🚨 Alert missed event received:', topic);
                 this.handleAlertMissedEvent(topic, payload, message);
             });
 
             // Subscribe to alert served events
             await window.solaceTrainMonitor.subscribe('tms/alert/served/>', (topic, payload, message) => {
-                console.log('🚨 Alert served event received:', topic);
+                // // console.log('🚨 Alert served event received:', topic);
                 this.handleAlertServedEvent(topic, payload, message);
             });
 
             // Subscribe to alert unserved events
             await window.solaceTrainMonitor.subscribe('tms/alert/unserved/>', (topic, payload, message) => {
-                console.log('🚫 Alert unserved event received:', topic);
+                // // console.log('🚫 Alert unserved event received:', topic);
                 this.handleAlertUnservedEvent(topic, payload, message);
             });
 
-            console.log('✅ Event subscriptions established');
+            // // console.log('✅ Event subscriptions established');
         } catch (error) {
-            console.error('❌ Failed to setup event subscriptions:', error);
+            // // console.error('❌ Failed to setup event subscriptions:', error);
         }
     }
 
@@ -111,11 +131,11 @@ class EventManager {
      */
     handleTrainEvent(topic, payload, message) {
         try {
-            console.log('🚂 Processing train event:', { topic, payload });
+            // // console.log('🚂 Processing train event:', { topic, payload });
             
             // Handle empty or invalid payload
             if (!payload || payload === 'No payload' || payload === 'Unable to decode payload') {
-                console.warn('⚠️ Empty or invalid payload for train event, skipping');
+                // // console.warn('⚠️ Empty or invalid payload for train event, skipping');
                 return;
             }
             
@@ -123,7 +143,7 @@ class EventManager {
             
             // Validate required fields
             if (!eventData.trainNumber && !eventData.trainName) {
-                console.warn('⚠️ Train event missing both trainNumber and trainName, skipping');
+                // // console.warn('⚠️ Train event missing both trainNumber and trainName, skipping');
                 return;
             }
             
@@ -137,10 +157,10 @@ class EventManager {
                 details: this.generateTrainEventDetails(eventData)
             };
             
-            console.log('🚂 Adding train event to list:', event.brief);
+            // // console.log('🚂 Adding train event to list:', event.brief);
             this.addEvent(event);
         } catch (error) {
-            console.error('❌ Error handling train event:', error, { topic, payload });
+            // // console.error('❌ Error handling train event:', error, { topic, payload });
         }
     }
 
@@ -149,11 +169,11 @@ class EventManager {
      */
     handleStationEvent(topic, payload, message) {
         try {
-            console.log('🚉 Processing station event:', { topic, payload });
+            // // console.log('🚉 Processing station event:', { topic, payload });
             
             // Handle empty or invalid payload
             if (!payload || payload === 'No payload' || payload === 'Unable to decode payload') {
-                console.warn('⚠️ Empty or invalid payload for station event, skipping');
+                // // console.warn('⚠️ Empty or invalid payload for station event, skipping');
                 return;
             }
             
@@ -161,12 +181,12 @@ class EventManager {
             
             // Validate required fields
             if (!eventData.trainNumber && !eventData.trainName) {
-                console.warn('⚠️ Station event missing both trainNumber and trainName, skipping');
+                // // console.warn('⚠️ Station event missing both trainNumber and trainName, skipping');
                 return;
             }
             
             if (!eventData.status) {
-                console.warn('⚠️ Station event missing status, skipping');
+                // console.warn('⚠️ Station event missing status, skipping');
                 return;
             }
             
@@ -180,7 +200,7 @@ class EventManager {
                 details: this.generateStationEventDetails(eventData)
             };
             
-            console.log('🚉 Adding station event to list:', event.brief);
+            // console.log('🚉 Adding station event to list:', event.brief);
             this.addEvent(event);
             
             // Check if this is a departure event and move unserved alerts to next station
@@ -188,7 +208,7 @@ class EventManager {
                 this.moveUnservedAlertsToNextStation(eventData);
             }
         } catch (error) {
-            console.error('❌ Error handling station event:', error, { topic, payload });
+            // console.error('❌ Error handling station event:', error, { topic, payload });
         }
     }
 
@@ -235,32 +255,32 @@ class EventManager {
             this.trackAlert(eventData);
             
             // Add alert flag to map for the next station
-            console.log('🚩 Checking for flag creation:', {
-                nextStation: eventData.nextStation,
-                nextStationName: eventData.nextStationName,
-                trainMonitorInstance: !!window.trainMonitorInstance,
-                map: window.trainMonitorInstance?.map ? 'exists' : 'missing',
-                fullEventData: eventData
-            });
+            // console.log('🚩 Checking for flag creation:', {
+            //     nextStation: eventData.nextStation,
+            //     nextStationName: eventData.nextStationName,
+            //     trainMonitorInstance: !!window.trainMonitorInstance,
+            //     map: window.trainMonitorInstance?.map ? 'exists' : 'missing',
+            //     fullEventData: eventData
+            // });
             
             if (eventData.nextStation && window.trainMonitorInstance) {
                 // Get alert count AFTER tracking the alert
                 const alertCount = this.getAlertCountForStation(eventData.nextStation);
-                console.log(`🚩 Creating flag for NEXT STATION: ${eventData.nextStation} (${eventData.nextStationName}) with ${alertCount} alerts`);
-                console.log(`🚩 Alert tracker state for ${eventData.nextStation}:`, this.alertTracker?.get(`${eventData.nextStation}_${eventData.nextStationName}`)?.summary);
+                // console.log(`🚩 Creating flag for NEXT STATION: ${eventData.nextStation} (${eventData.nextStationName}) with ${alertCount} alerts`);
+                // console.log(`🚩 Alert tracker state for ${eventData.nextStation}:`, this.alertTracker?.get(`${eventData.nextStation}_${eventData.nextStationName}`)?.summary);
                 window.trainMonitorInstance.updateAlertFlag(eventData.nextStation, alertCount);
             } else {
-                console.warn('🚩 Cannot create flag:', {
-                    nextStation: eventData.nextStation,
-                    nextStationName: eventData.nextStationName,
-                    trainMonitorInstance: !!window.trainMonitorInstance
-                });
+                // console.warn('🚩 Cannot create flag:', {
+                //     nextStation: eventData.nextStation,
+                //     nextStationName: eventData.nextStationName,
+                //     trainMonitorInstance: !!window.trainMonitorInstance
+                // });
             }
             
-            console.log('🚨 Alert raised event processed:', eventData);
+            // console.log('🚨 Alert raised event processed:', eventData);
             
         } catch (error) {
-            console.error('❌ Error handling alert raised event:', error);
+            // console.error('❌ Error handling alert raised event:', error);
         }
     }
 
@@ -269,11 +289,11 @@ class EventManager {
      */
     handleAlertMissedEvent(topic, payload, message) {
         try {
-            console.log('🚨 Alert missed event received:', topic);
+            // console.log('🚨 Alert missed event received:', topic);
             
             // Handle empty or invalid payload
             if (!payload || payload === 'No payload' || payload === 'Unable to decode payload') {
-                console.warn('⚠️ Empty or invalid payload for missed alert event, skipping');
+                // console.warn('⚠️ Empty or invalid payload for missed alert event, skipping');
                 return;
             }
             
@@ -288,15 +308,15 @@ class EventManager {
                 details: this.generateAlertMissedEventDetails(eventData)
             };
             
-            console.log('🚨 Adding missed alert event to list:', event.brief);
+            // console.log('🚨 Adding missed alert event to list:', event.brief);
             this.addEvent(event);
             
             // Track the missed alert
             this.trackMissedAlert(eventData);
             
-            console.log('🚨 Alert missed event processed:', eventData);
+            // console.log('🚨 Alert missed event processed:', eventData);
         } catch (error) {
-            console.error('❌ Error handling alert missed event:', error);
+            // console.error('❌ Error handling alert missed event:', error);
         }
     }
 
@@ -305,11 +325,11 @@ class EventManager {
      */
     handleAlertServedEvent(topic, payload, message) {
         try {
-            console.log('🚨 Alert served event received:', topic);
+            // console.log('🚨 Alert served event received:', topic);
             
             // Handle empty or invalid payload
             if (!payload || payload === 'No payload' || payload === 'Unable to decode payload') {
-                console.warn('⚠️ Empty or invalid payload for served alert event, skipping');
+                // console.warn('⚠️ Empty or invalid payload for served alert event, skipping');
                 return;
             }
             
@@ -324,12 +344,12 @@ class EventManager {
                 details: this.generateAlertServedEventDetails(eventData)
             };
             
-            console.log('🚨 Adding served alert event to list:', event.brief);
+            // console.log('🚨 Adding served alert event to list:', event.brief);
             this.addEvent(event);
             
-            console.log('🚨 Alert served event processed:', eventData);
+            // console.log('🚨 Alert served event processed:', eventData);
         } catch (error) {
-            console.error('❌ Error handling alert served event:', error);
+            // console.error('❌ Error handling alert served event:', error);
         }
     }
 
@@ -338,8 +358,8 @@ class EventManager {
      */
     handleAlertUnservedEvent(topic, payload, message) {
         try {
-            console.log('🚫 Processing alert unserved event:', topic, payload);
-            console.log('🚫 EventManager events count before:', this.events.length);
+            // console.log('🚫 Processing alert unserved event:', topic, payload);
+            // console.log('🚫 EventManager events count before:', this.events.length);
             
             const eventData = typeof payload === 'string' ? JSON.parse(payload) : payload;
             const event = {
@@ -352,15 +372,15 @@ class EventManager {
                 details: this.generateAlertUnservedEventDetails(eventData)
             };
             
-            console.log('🚫 Created unserved event object:', event);
-            console.log('🚫 Adding unserved alert event to list:', event.brief);
+            // console.log('🚫 Created unserved event object:', event);
+            // console.log('🚫 Adding unserved alert event to list:', event.brief);
             
             this.addEvent(event);
             
-            console.log('🚫 EventManager events count after:', this.events.length);
-            console.log('🚫 Alert unserved event processed successfully:', eventData);
+            // console.log('🚫 EventManager events count after:', this.events.length);
+            // console.log('🚫 Alert unserved event processed successfully:', eventData);
         } catch (error) {
-            console.error('❌ Error handling alert unserved event:', error);
+            // console.error('❌ Error handling alert unserved event:', error);
         }
     }
     
@@ -416,9 +436,9 @@ class EventManager {
             stationData.alerts.received.push(alertRecord);
             stationData.summary.received++;
             
-            console.log(`📊 Alert tracked for station ${stationKey}:`, stationData.summary);
+            // console.log(`📊 Alert tracked for station ${stationKey}:`, stationData.summary);
         } else {
-            console.log(`⏭️ Skipping duplicate alert ${type} for train ${trainNumber} at station ${stationKey}`);
+            // console.log(`⏭️ Skipping duplicate alert ${type} for train ${trainNumber} at station ${stationKey}`);
         }
     }
 
@@ -452,7 +472,7 @@ class EventManager {
         stationData.alerts.missed.push(alertData);
         stationData.summary.missed++;
         
-        console.log(`📊 Missed alert tracked for station ${stationKey}:`, stationData.summary);
+        // console.log(`📊 Missed alert tracked for station ${stationKey}:`, stationData.summary);
     }
 
     getAlertCountForStation(stationCode) {
@@ -480,7 +500,7 @@ class EventManager {
         const currentStationData = this.alertTracker.get(currentStationKey);
         
         if (!currentStationData) {
-            console.log(`🚩 No alert data found for station ${currentStation}`);
+            // console.log(`🚩 No alert data found for station ${currentStation}`);
             return;
         }
         
@@ -489,13 +509,18 @@ class EventManager {
         const hasServedAlerts = currentStationData.alerts.served && currentStationData.alerts.served.length > 0;
         
         if (!hasUnservedAlerts && !hasServedAlerts) {
-            console.log(`🚩 No alerts (served or unserved) at station ${currentStation}`);
+            // console.log(`🚩 No alerts (served or unserved) at station ${currentStation}`);
             return;
         }
         
         // Handle unserved alerts (move them to next station)
         if (hasUnservedAlerts) {
-            console.log(`🚩 Moving ${currentStationData.alerts.received.length} unserved alerts from ${currentStation} to ${nextStation}`);
+            this.logAlertAudit(`Moving ${currentStationData.alerts.received.length} unserved alert(s) from ${departureData.currentStationName} -> ${departureData.nextStationName}`, {
+                trainNumber,
+                from: { code: currentStation, name: departureData.currentStationName },
+                to: { code: nextStation, name: departureData.nextStationName }
+            });
+            // console.log(`🚩 Moving ${currentStationData.alerts.received.length} unserved alerts from ${currentStation} to ${nextStation}`);
             
             // Get or create next station data
             const nextStationKey = `${nextStation}_${departureData.nextStationName}`;
@@ -527,14 +552,14 @@ class EventManager {
             );
             
             if (uniqueAlertsToMove.length !== alertsToMove.length) {
-                console.log(`🔍 Removed ${alertsToMove.length - uniqueAlertsToMove.length} duplicate alerts from move operation`);
+                // console.log(`🔍 Removed ${alertsToMove.length - uniqueAlertsToMove.length} duplicate alerts from move operation`);
             }
             
-            console.log(`🔄 Moving ${uniqueAlertsToMove.length} unserved alerts from ${departureData.currentStationName} to ${departureData.nextStationName}`);
-            console.log(`🔍 Alerts to move:`, uniqueAlertsToMove.map(alert => ({ type: alert.type, trainNumber: alert.trainNumber, id: alert.id || 'no-id' })));
+            // console.log(`🔄 Moving ${uniqueAlertsToMove.length} unserved alerts from ${departureData.currentStationName} to ${departureData.nextStationName}`);
+            // console.log(`🔍 Alerts to move:`, uniqueAlertsToMove.map(alert => ({ type: alert.type, trainNumber: alert.trainNumber, id: alert.id || 'no-id' })));
             
             uniqueAlertsToMove.forEach(alert => {
-                console.log(`📋 Moving alert: ${alert.type} for train ${alert.trainNumber} from ${departureData.currentStationName} to ${departureData.nextStationName}`);
+                // console.log(`📋 Moving alert: ${alert.type} for train ${alert.trainNumber} from ${departureData.currentStationName} to ${departureData.nextStationName}`);
                 
                 // Update alert with new station information first
                 const movedAlert = {
@@ -547,14 +572,23 @@ class EventManager {
                     raisedTime: alert.raisedTime || alert.timestamp // Preserve original raised time
                 };
                 
-                // Publish missed alert event for this move
-                console.log(`📤 Publishing missed event for alert ${movedAlert.type} at station ${departureData.currentStationName}`);
-                this.publishMissedAlertEvent(movedAlert, currentStation, departureData.currentStationName);
+                // Randomized processing: sometimes get served here, sometimes miss and move, sometimes remain sticky
+                const serveProb = (window && typeof window.MULTI_ALERT_SERVE_PROB === 'number') ? window.MULTI_ALERT_SERVE_PROB : 0.5;
+                const sticky = !!movedAlert.sticky; // if true, prefer to keep moving towards destination unserved
+                const rnd = Math.random();
+                if (!sticky && rnd < serveProb) {
+                    // Mark as served at current station
+                    this.publishAlertServedEvent(movedAlert, currentStation, departureData.currentStationName);
+                    this.logAlertAudit('Published SERVED alert (randomized)', { type: movedAlert.type, station: departureData.currentStationName, trainNumber: movedAlert.trainNumber });
+                    // Do not move to next station
+                    return;
+                }
                 
-                // Publish alert raised event for next station
-                console.log(`📤 Publishing raised event for alert ${movedAlert.type} at next station ${departureData.nextStationName}`);
-                console.log(`⏰ Using raised time: ${movedAlert.raisedTime} (original alert raised time)`);
+                // Otherwise, mark missed and re-raise for next station
+                this.publishMissedAlertEvent(movedAlert, currentStation, departureData.currentStationName);
+                this.logAlertAudit('Published MISSED alert (randomized)', { type: movedAlert.type, station: departureData.currentStationName, trainNumber: movedAlert.trainNumber });
                 this.publishAlertRaisedEvent(movedAlert, nextStation, departureData.nextStationName, true);
+                this.logAlertAudit('Published RERAISED alert for next station (randomized)', { type: movedAlert.type, nextStation: departureData.nextStationName, trainNumber: movedAlert.trainNumber });
                 
                 // Check if alert already exists in next station to prevent duplicates
                 const existingAlert = nextStationData.alerts.received.find(existing => 
@@ -565,9 +599,9 @@ class EventManager {
                     // Add to next station's received alerts only if it doesn't already exist
                     nextStationData.alerts.received.push(movedAlert);
                     nextStationData.summary.received++;
-                    console.log(`✅ Added alert ${movedAlert.type} for train ${movedAlert.trainNumber} to station ${nextStation}`);
+                    // console.log(`✅ Added alert ${movedAlert.type} for train ${movedAlert.trainNumber} to station ${nextStation}`);
                 } else {
-                    console.log(`⏭️ Skipping duplicate alert ${movedAlert.type} for train ${movedAlert.trainNumber} at station ${nextStation}`);
+                    // console.log(`⏭️ Skipping duplicate alert ${movedAlert.type} for train ${movedAlert.trainNumber} at station ${nextStation}`);
                 }
             });
             
@@ -579,38 +613,39 @@ class EventManager {
             if (window.trainMonitorInstance && nextStationData.summary.received > 0) {
                 const summaryCount = nextStationData.summary.received;
                 const actualCount = nextStationData.alerts.received.length;
-                console.log(`🚩 Updating flag for next station ${nextStation} with ${summaryCount} alerts (summary) vs ${actualCount} alerts (actual)`);
-                console.log(`🚩 Next station alert tracker state:`, nextStationData.summary);
-                console.log(`🚩 Alert details for next station:`, nextStationData.alerts.received);
+                // console.log(`🚩 Updating flag for next station ${nextStation} with ${summaryCount} alerts (summary) vs ${actualCount} alerts (actual)`);
+                // console.log(`🚩 Next station alert tracker state:`, nextStationData.summary);
+                // console.log(`🚩 Alert details for next station:`, nextStationData.alerts.received);
                 
                 // Use actual count instead of summary count
                 window.trainMonitorInstance.updateAlertFlag(nextStation, actualCount);
             } else {
-                console.log(`🚩 Not updating flag - trainMonitorInstance: ${!!window.trainMonitorInstance}, alerts: ${nextStationData?.summary?.received || 0}`);
+                // console.log(`🚩 Not updating flag - trainMonitorInstance: ${!!window.trainMonitorInstance}, alerts: ${nextStationData?.summary?.received || 0}`);
             }
         }
         
         // Handle served alerts (publish served events)
         if (hasServedAlerts) {
-            console.log(`🚩 Publishing served events for ${currentStationData.alerts.served.length} served alerts at ${currentStation}`);
+            // console.log(`🚩 Publishing served events for ${currentStationData.alerts.served.length} served alerts at ${currentStation}`);
             currentStationData.alerts.served.forEach(alert => {
                 this.publishAlertServedEvent(alert, currentStation, departureData.currentStationName);
+                this.logAlertAudit('Published SERVED alert on departure', { type: alert.type, station: departureData.currentStationName, trainNumber: alert.trainNumber });
             });
         }
         
         // Always remove the flag from the current station when train departs
         if (window.trainMonitorInstance) {
-            console.log(`🚩 Removing flag from current station ${currentStation} (train departing)`);
+            // console.log(`🚩 Removing flag from current station ${currentStation} (train departing)`);
             window.trainMonitorInstance.removeAlertFlag(currentStation);
         }
         
-        console.log(`✅ Processed alerts for station ${currentStation} - train departing`);
+        // console.log(`✅ Processed alerts for station ${currentStation} - train departing`);
     }
 
     // Publish missed alert event when train departs without serving alert
     publishMissedAlertEvent(alertData, missedStation, missedStationName) {
         if (!window.solaceTrainMonitor) {
-            console.warn('🚩 Solace integration not available for publishing missed alert');
+            // console.warn('🚩 Solace integration not available for publishing missed alert');
             return;
         }
         
@@ -636,24 +671,30 @@ class EventManager {
         
         window.solaceTrainMonitor.publish(topic, JSON.stringify(payload))
             .then(() => {
-                console.log(`📤 Published missed alert event to topic: ${topic}`);
+                // console.log(`📤 Published missed alert event to topic: ${topic}`);
             })
             .catch(error => {
-                console.error('❌ Failed to publish missed alert event:', error);
+                // console.error('❌ Failed to publish missed alert event:', error);
             });
     }
 
     // Publish alert raised event when alert is moved to next station
     publishAlertRaisedEvent(alertData, nextStation, nextStationName, reraised = false) {
+        // Check if event publishing is enabled
+        if (!window.publishEvents) {
+            console.log('📤 Event publishing disabled, skipping alert raised event');
+            return;
+        }
+        
         if (!window.solaceTrainMonitor) {
-            console.warn('🚩 Solace integration not available for publishing alert raised event');
+            // console.warn('🚩 Solace integration not available for publishing alert raised event');
             return;
         }
         
         const topic = `tms/alert/raised/${alertData.type}/${alertData.trainNumber}/${nextStation}`;
         
         if (reraised) {
-            console.log(`📤 Publishing alert re-raised event to topic: ${topic}`);
+            // console.log(`📤 Publishing alert re-raised event to topic: ${topic}`);
         }
         const payload = {
             type: alertData.type,
@@ -676,18 +717,24 @@ class EventManager {
         
         window.solaceTrainMonitor.publish(topic, JSON.stringify(payload))
             .then(() => {
-                console.log(`📤 Published alert raised event to topic: ${topic}`);
-                console.log(`📊 Alert moved from ${alertData.movedFromName} to ${nextStationName}`);
+                // console.log(`📤 Published alert raised event to topic: ${topic}`);
+                // console.log(`📊 Alert moved from ${alertData.movedFromName} to ${nextStationName}`);
             })
             .catch(error => {
-                console.error('❌ Failed to publish alert raised event:', error);
+                // console.error('❌ Failed to publish alert raised event:', error);
             });
     }
 
     // Publish alert served event when train departs from station with served alerts
     publishAlertServedEvent(alertData, stationCode, stationName) {
+        // Check if event publishing is enabled
+        if (!window.publishEvents) {
+            console.log('📤 Event publishing disabled, skipping alert served event');
+            return;
+        }
+        
         if (!window.solaceTrainMonitor) {
-            console.warn('🚩 Solace integration not available for publishing alert served event');
+            // console.warn('🚩 Solace integration not available for publishing alert served event');
             return;
         }
         
@@ -706,17 +753,23 @@ class EventManager {
         
         window.solaceTrainMonitor.publish(topic, JSON.stringify(payload))
             .then(() => {
-                console.log(`📤 Published alert served event to topic: ${topic}`);
+                // console.log(`📤 Published alert served event to topic: ${topic}`);
             })
             .catch(error => {
-                console.error('❌ Failed to publish alert served event:', error);
+                // console.error('❌ Failed to publish alert served event:', error);
             });
     }
 
     // Publish alert unserved event when train reaches destination with unserved alerts
     publishAlertUnservedEvent(alertData, stationCode, stationName) {
+        // Check if event publishing is enabled
+        if (!window.publishEvents) {
+            console.log('📤 Event publishing disabled, skipping alert unserved event');
+            return;
+        }
+        
         if (!window.solaceTrainMonitor) {
-            console.warn('🚩 Solace integration not available for publishing alert unserved event');
+            // console.warn('🚩 Solace integration not available for publishing alert unserved event');
             return;
         }
         
@@ -742,34 +795,34 @@ class EventManager {
         
         window.solaceTrainMonitor.publish(topic, JSON.stringify(payload))
             .then(() => {
-                console.log(`📤 Published alert unserved event to topic: ${topic}`);
-                console.log(`📊 Alert unserved at destination: ${stationName}`);
+                // console.log(`📤 Published alert unserved event to topic: ${topic}`);
+                // console.log(`📊 Alert unserved at destination: ${stationName}`);
             })
             .catch(error => {
-                console.error('❌ Failed to publish alert unserved event:', error);
+                // console.error('❌ Failed to publish alert unserved event:', error);
             });
     }
 
     // Method to clear unserved alerts when train reaches destination
     clearUnservedAlertsAtDestination(trainNumber, destinationStation, destinationStationName) {
-        console.log(`🏁 CLEAR UNSERVED ALERTS CALLED for train ${trainNumber} at destination ${destinationStationName}`);
+        // console.log(`🏁 CLEAR UNSERVED ALERTS CALLED for train ${trainNumber} at destination ${destinationStationName}`);
         
         if (!this.alertTracker) {
-            console.log(`❌ AlertTracker not available`);
+            // console.log(`❌ AlertTracker not available`);
             return;
         }
         
-        console.log(`🏁 Clearing unserved alerts for train ${trainNumber} at destination ${destinationStationName}`);
-        console.log(`🔍 Looking for station key: ${destinationStation}_${destinationStationName}`);
-        console.log(`📋 Available station keys:`, Array.from(this.alertTracker.keys()));
-        console.log(`📋 AlertTracker size:`, this.alertTracker.size);
+        // console.log(`🏁 Clearing unserved alerts for train ${trainNumber} at destination ${destinationStationName}`);
+        // console.log(`🔍 Looking for station key: ${destinationStation}_${destinationStationName}`);
+        // console.log(`📋 Available station keys:`, Array.from(this.alertTracker.keys()));
+        // console.log(`📋 AlertTracker size:`, this.alertTracker.size);
         
         // Debug: Show all alerts in the tracker
-        console.log(`🔍 All alerts in tracker:`);
+        // console.log(`🔍 All alerts in tracker:`);
         for (const [key, data] of this.alertTracker.entries()) {
-            console.log(`  ${key}: ${data.alerts.received.length} alerts`);
+            // console.log(`  ${key}: ${data.alerts.received.length} alerts`);
             if (data.alerts.received.length > 0) {
-                console.log(`    Alerts:`, data.alerts.received.map(alert => `${alert.type} for train ${alert.trainNumber}`));
+                // console.log(`    Alerts:`, data.alerts.received.map(alert => `${alert.type} for train ${alert.trainNumber}`));
             }
         }
         
@@ -784,8 +837,8 @@ class EventManager {
                 // Check if any alerts are for this train
                 const trainAlerts = data.alerts.received.filter(alert => alert.trainNumber === trainNumber);
                 if (trainAlerts.length > 0) {
-                    console.log(`🔍 Found ${trainAlerts.length} unserved alerts for train ${trainNumber} at station ${key}`);
-                    console.log(`🔍 Alert details:`, trainAlerts.map(alert => ({ type: alert.type, id: alert.id, raisedTime: alert.raisedTime })));
+                    // console.log(`🔍 Found ${trainAlerts.length} unserved alerts for train ${trainNumber} at station ${key}`);
+                    // console.log(`🔍 Alert details:`, trainAlerts.map(alert => ({ type: alert.type, id: alert.id, raisedTime: alert.raisedTime })));
                     alertsToMoveToDestination.push(...trainAlerts);
                 }
             }
@@ -793,7 +846,7 @@ class EventManager {
         
         // If there are alerts to move to destination, move them first
         if (alertsToMoveToDestination.length > 0) {
-            console.log(`🚩 Moving ${alertsToMoveToDestination.length} unserved alerts to destination ${destinationStationName} before clearing`);
+            // console.log(`🚩 Moving ${alertsToMoveToDestination.length} unserved alerts to destination ${destinationStationName} before clearing`);
             
             // Get or create destination station data
             const destinationStationKey = `${destinationStation}_${destinationStationName}`;
@@ -837,10 +890,10 @@ class EventManager {
                     
                     destinationStationData.alerts.received.push(movedAlert);
                     destinationStationData.summary.received++;
-                    console.log(`✅ Moved alert ${movedAlert.type} for train ${movedAlert.trainNumber} to destination ${destinationStationName}`);
-                    console.log(`✅ Alert details after move:`, { type: movedAlert.type, id: movedAlert.id, raisedTime: movedAlert.raisedTime });
+                    // console.log(`✅ Moved alert ${movedAlert.type} for train ${movedAlert.trainNumber} to destination ${destinationStationName}`);
+                    // console.log(`✅ Alert details after move:`, { type: movedAlert.type, id: movedAlert.id, raisedTime: movedAlert.raisedTime });
                 } else {
-                    console.log(`⏭️ Alert ${alert.type} for train ${alert.trainNumber} already exists in destination ${destinationStationName}`);
+                    // console.log(`⏭️ Alert ${alert.type} for train ${alert.trainNumber} already exists in destination ${destinationStationName}`);
                 }
             });
             
@@ -852,18 +905,18 @@ class EventManager {
                     const removedCount = originalLength - data.alerts.received.length;
                     if (removedCount > 0) {
                         data.summary.received -= removedCount;
-                        console.log(`🗑️ Removed ${removedCount} alerts from station ${key}`);
+                        // console.log(`🗑️ Removed ${removedCount} alerts from station ${key}`);
                     }
                 }
             }
             
             // Debug: Show the state after moving alerts
-            console.log(`🔍 Alert tracker state after moving alerts to destination:`);
+            // console.log(`🔍 Alert tracker state after moving alerts to destination:`);
             for (const [key, data] of this.alertTracker.entries()) {
                 if (data.alerts.received.length > 0) {
-                    console.log(`  ${key}: ${data.alerts.received.length} alerts`);
+                    // console.log(`  ${key}: ${data.alerts.received.length} alerts`);
                     data.alerts.received.forEach(alert => {
-                        console.log(`    - ${alert.type} for train ${alert.trainNumber} (id: ${alert.id})`);
+                        // console.log(`    - ${alert.type} for train ${alert.trainNumber} (id: ${alert.id})`);
                     });
                 }
             }
@@ -871,23 +924,29 @@ class EventManager {
         
         // Now find the station key that matches the destination station
         for (const [key, data] of this.alertTracker.entries()) {
-            console.log(`🔍 Checking key: "${key}" against pattern: "${destinationStation}_"`);
+            // console.log(`🔍 Checking key: "${key}" against pattern: "${destinationStation}_"`);
             if (key.startsWith(`${destinationStation}_`)) {
                 foundStation = true;
-                console.log(`✅ Found matching station key: ${key}`);
-                console.log(`📊 Station data:`, data);
+                // console.log(`✅ Found matching station key: ${key}`);
+                // console.log(`📊 Station data:`, data);
                 
                 const unservedAlerts = [...data.alerts.received]; // Create a copy to avoid modification during iteration
                 totalUnservedAlerts = unservedAlerts.length;
                 
-                console.log(`📋 Found ${unservedAlerts.length} unserved alerts at destination ${destinationStationName}`);
-                console.log(`📋 Unserved alerts:`, unservedAlerts);
+                // console.log(`📋 Found ${unservedAlerts.length} unserved alerts at destination ${destinationStationName}`);
+                // console.log(`📋 Unserved alerts:`, unservedAlerts);
                 
                 if (unservedAlerts.length > 0) {
                     // Publish unserved events for each alert
+                    const stickyProb = (window && typeof window.MULTI_ALERT_STICKY_PROB === 'number') ? window.MULTI_ALERT_STICKY_PROB : 0.1;
                     unservedAlerts.forEach((alert, index) => {
-                        console.log(`📤 Publishing unserved event ${index + 1}/${unservedAlerts.length} for alert:`, { type: alert.type, trainNumber: alert.trainNumber, id: alert.id });
-                        this.publishAlertUnservedEvent(alert, destinationStation, destinationStationName);
+                        const shouldUnserve = alert.sticky ? true : (Math.random() < stickyProb);
+                        if (shouldUnserve) {
+                            this.publishAlertUnservedEvent(alert, destinationStation, destinationStationName);
+                        } else {
+                            // Treat as served upon arrival at destination
+                            this.publishAlertServedEvent(alert, destinationStation, destinationStationName);
+                        }
                     });
                     
                     // Clear the alerts from the tracker
@@ -896,21 +955,21 @@ class EventManager {
                     
                     // Clear the flag on the map
                     if (window.trainMonitorInstance) {
-                        console.log(`🚩 Clearing flag for destination station ${destinationStation}`);
+                        // console.log(`🚩 Clearing flag for destination station ${destinationStation}`);
                         window.trainMonitorInstance.updateAlertFlag(destinationStation, 0);
                     }
                 } else {
-                    console.log(`📋 No unserved alerts found at destination ${destinationStationName}`);
+                    // console.log(`📋 No unserved alerts found at destination ${destinationStationName}`);
                 }
                 break;
             }
         }
         
         if (!foundStation) {
-            console.log(`❌ No station found with key starting with: ${destinationStation}_`);
+            // console.log(`❌ No station found with key starting with: ${destinationStation}_`);
         }
         
-        console.log(`🏁 CLEAR UNSERVED ALERTS COMPLETED - Found station: ${foundStation}, Unserved alerts: ${totalUnservedAlerts}`);
+        // console.log(`🏁 CLEAR UNSERVED ALERTS COMPLETED - Found station: ${foundStation}, Unserved alerts: ${totalUnservedAlerts}`);
     }
 
     // Method to mark alerts as served (called when train arrives at station)
@@ -928,9 +987,9 @@ class EventManager {
                 
                 // Don't remove flag immediately - let it blink until train departs
                 // The flag will be removed when the train departs from the station
-                console.log(`📊 Alerts marked as served for station ${stationCode}:`, data.summary);
+                // console.log(`📊 Alerts marked as served for station ${stationCode}:`, data.summary);
                 
-                console.log(`✅ Alerts marked as served for station ${stationCode}:`, data.summary);
+                // console.log(`✅ Alerts marked as served for station ${stationCode}:`, data.summary);
                 break;
             }
         }
@@ -1234,8 +1293,8 @@ class EventManager {
      * Add a new event to the list
      */
     addEvent(event) {
-        console.log('📝 addEvent called with event:', event.type, event.brief);
-        console.log('📝 Events count before adding:', this.events.length);
+        // console.log('📝 addEvent called with event:', event.type, event.brief);
+        // console.log('📝 Events count before adding:', this.events.length);
         
         // Add to beginning of array (newest first)
         this.events.unshift(event);
@@ -1245,13 +1304,18 @@ class EventManager {
             this.events = this.events.slice(0, this.maxEvents);
         }
         
-        console.log('📝 Events count after adding:', this.events.length);
-        console.log('📝 Calling renderEvents...');
+        // console.log('📝 Events count after adding:', this.events.length);
+        // console.log('📝 Calling renderEvents...');
         
         this.renderEvents();
         this.autoScrollToTop();
+        try {
+            if (window.multiTrainSystem && window.multiTrainSystem.uiControls && typeof window.multiTrainSystem.uiControls.updateMultiStats === 'function') {
+                window.multiTrainSystem.uiControls.updateMultiStats();
+            }
+        } catch (_e) {}
         
-        console.log('📝 addEvent completed');
+        // console.log('📝 addEvent completed');
     }
 
     /**
@@ -1297,7 +1361,7 @@ class EventManager {
         if (enabled && this.events.length > this.maxEvents) {
             this.events = this.events.slice(0, this.maxEvents);
             this.renderEvents();
-            console.log(`🧹 Auto-clean applied: reduced events from ${this.events.length + (this.events.length - this.maxEvents)} to ${this.maxEvents}`);
+            // console.log(`🧹 Auto-clean applied: reduced events from ${this.events.length + (this.events.length - this.maxEvents)} to ${this.maxEvents}`);
         }
     }
 
@@ -1402,5 +1466,5 @@ class EventManager {
 // Initialize Event Manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     window.eventManager = new EventManager();
-    console.log('📋 Event Manager initialized');
+    // console.log('📋 Event Manager initialized');
 });

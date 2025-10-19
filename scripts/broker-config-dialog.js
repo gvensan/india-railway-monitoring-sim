@@ -27,7 +27,7 @@ class BrokerConfigDialog {
         this.hostedNote = document.getElementById('hosted-environment-note');
 
         if (!this.dialog || !this.form || !this.solaceFields) {
-            console.error('❌ Broker configuration dialog elements not found');
+            // console.error('❌ Broker configuration dialog elements not found');
             return;
         }
 
@@ -83,7 +83,7 @@ class BrokerConfigDialog {
             // Check if we're in a hosted environment and set appropriate default
             if (window.BrokerConfig && window.BrokerConfig.isHostedEnvironment()) {
                 currentBrokerType = 'inmemory';
-                console.log('🌐 Hosted environment detected, defaulting to in-memory broker');
+                // console.log('🌐 Hosted environment detected, defaulting to in-memory broker');
                 
                 // Show hosted environment note
                 if (this.hostedNote) {
@@ -110,11 +110,11 @@ class BrokerConfigDialog {
             const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
             if (storedConfig && storedConfig.brokerType === 'solace' && storedConfig.config) {
                 solaceConfig = storedConfig.config;
-                console.log('📋 Loading stored Solace configuration');
+                // console.log('📋 Loading stored Solace configuration');
             } else if (currentConfig) {
                 // Fallback to current/default configuration
                 solaceConfig = currentConfig;
-                console.log('📋 Loading default Solace configuration');
+                // console.log('📋 Loading default Solace configuration');
             }
             
             // Load Solace configuration into form fields
@@ -131,11 +131,11 @@ class BrokerConfigDialog {
                     document.getElementById('broker-vpn').value = defaultConfig.vpnName || '';
                     document.getElementById('broker-username').value = defaultConfig.userName || '';
                     document.getElementById('broker-password').value = defaultConfig.password || '';
-                    console.log('📋 Loading default Solace configuration values');
+                    // console.log('📋 Loading default Solace configuration values');
                 }
             }
         } catch (error) {
-            console.error('❌ Error loading current broker configuration:', error);
+            // console.error('❌ Error loading current broker configuration:', error);
         }
     }
 
@@ -166,11 +166,11 @@ class BrokerConfigDialog {
             const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
             if (storedConfig && storedConfig.brokerType === 'solace' && storedConfig.config) {
                 solaceConfig = storedConfig.config;
-                console.log('📋 Loading stored Solace configuration for form');
+                // console.log('📋 Loading stored Solace configuration for form');
             } else {
                 // Fallback to default Solace configuration
                 solaceConfig = window.BrokerConfig ? window.BrokerConfig.getBrokerConfig('development') : null;
-                console.log('📋 Loading default Solace configuration for form');
+                // console.log('📋 Loading default Solace configuration for form');
             }
             
             // Load configuration into form fields
@@ -180,12 +180,12 @@ class BrokerConfigDialog {
                 document.getElementById('broker-username').value = solaceConfig.userName || '';
                 document.getElementById('broker-password').value = solaceConfig.password || '';
                 
-                console.log('✅ Solace configuration loaded into form fields');
+                // console.log('✅ Solace configuration loaded into form fields');
             } else {
-                console.warn('⚠️ No Solace configuration available to load');
+                // console.warn('⚠️ No Solace configuration available to load');
             }
         } catch (error) {
-            console.error('❌ Error loading Solace configuration:', error);
+            // console.error('❌ Error loading Solace configuration:', error);
         }
     }
 
@@ -226,7 +226,7 @@ class BrokerConfigDialog {
             this.resetApplication();
 
         } catch (error) {
-            console.error('❌ Error saving broker configuration:', error);
+            // console.error('❌ Error saving broker configuration:', error);
             alert('Error saving configuration. Please try again.');
         }
     }
@@ -249,15 +249,15 @@ class BrokerConfigDialog {
                 }
             }
 
-            console.log('✅ Broker configuration saved:', configData);
+            // console.log('✅ Broker configuration saved:', configData);
         } catch (error) {
-            console.error('❌ Error storing broker configuration:', error);
+            // console.error('❌ Error storing broker configuration:', error);
         }
     }
 
     resetApplication() {
         try {
-            console.log('🔄 Resetting application due to broker configuration change...');
+            // console.log('🔄 Resetting application due to broker configuration change...');
 
             // Show loading message
             this.showResetMessage();
@@ -267,7 +267,7 @@ class BrokerConfigDialog {
                 try {
                     window.solaceTrainMonitor.disconnect();
                 } catch (error) {
-                    console.warn('⚠️ Error disconnecting current broker:', error);
+                    // console.warn('⚠️ Error disconnecting current broker:', error);
                 }
             }
 
@@ -290,7 +290,7 @@ class BrokerConfigDialog {
             }, 2000);
 
         } catch (error) {
-            console.error('❌ Error resetting application:', error);
+            // console.error('❌ Error resetting application:', error);
             alert('Error resetting application. Please refresh the page manually.');
         }
     }
