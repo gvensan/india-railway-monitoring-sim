@@ -589,9 +589,6 @@ class ProductTour {
         const rect = element.getBoundingClientRect();
         const padding = this.config.highlightPadding;
         
-        console.log(`🎯 Tour: Highlighting element:`, element, 'Rect:', rect);
-        console.log(`🎯 Tour: Element ID:`, element.id, 'Element class:', element.className);
-        console.log(`🎯 Tour: Element visible:`, element.offsetWidth > 0 && element.offsetHeight > 0);
         
         // For sidebar panels, ensure we cover the entire visible area
         let highlightRect = {
@@ -634,12 +631,6 @@ class ProductTour {
         this.highlight.style.width = highlightRect.width + 'px';
         this.highlight.style.height = highlightRect.height + 'px';
         
-        console.log(`🎯 Tour: Highlight positioned at:`, {
-            left: highlightRect.left,
-            top: highlightRect.top,
-            width: highlightRect.width,
-            height: highlightRect.height
-        });
         
     }
     
@@ -982,7 +973,6 @@ class ProductTour {
         this.tourChangedEventPublishing = false;
         this.tourOpenedEventsSidebar = false;
         
-        console.log('🎯 Tour: Starting event publishing setup, original state:', this.originalPublishEventsState);
         
         // Temporarily enable event publishing if it was disabled
         if (!window.publishEvents) {
@@ -995,19 +985,14 @@ class ProductTour {
                 publishEventsCheckbox.checked = true;
             }
             
-            console.log('🎯 Tour: Temporarily enabled event publishing for demonstration');
         }
         
         // Automatically open the events sidebar with a small delay
         setTimeout(() => {
             const eventsFloatingBtn = document.getElementById('eventsFloatingBtn');
             if (eventsFloatingBtn) {
-                console.log('🎯 Tour: Clicking events floating button to open sidebar');
                 eventsFloatingBtn.click();
                 this.tourOpenedEventsSidebar = true;
-                console.log('🎯 Tour: Automatically opened events sidebar for demonstration');
-            } else {
-                console.error('🎯 Tour: Events floating button not found!');
             }
         }, 100);
     }
@@ -1036,7 +1021,6 @@ class ProductTour {
                 publishEventsCheckbox.checked = this.originalPublishEventsState;
             }
             
-            console.log('🎯 Tour: Restored event publishing state to:', this.originalPublishEventsState);
         }
         
         // Close the events sidebar if it was opened by the tour
@@ -1046,7 +1030,6 @@ class ProductTour {
                 const closeLeftSidebarBtn = document.getElementById('closeLeftSidebarBtn');
                 if (closeLeftSidebarBtn) {
                     closeLeftSidebarBtn.click();
-                    console.log('🎯 Tour: Closed events sidebar after demonstration');
                 }
             }
         }

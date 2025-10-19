@@ -80,37 +80,30 @@ class EventManager {
      * Subscribe to all TMS events
      */
   async subscribeToEvents() {
-    try { console.info('[EventManager] subscribeToEvents invoked'); } catch (_e) {}
         try {
-            // // console.log('🔄 Setting up event subscriptions...');
             
             // Subscribe to train events
             await window.solaceTrainMonitor.subscribeToTrainEvents((topic, payload, message) => {
-                // // console.log('🚂 Train event received:', topic);
                 this.handleTrainEvent(topic, payload, message);
             });
 
             // Subscribe to station events
             await window.solaceTrainMonitor.subscribeToStationEvents((topic, payload, message) => {
-                // // console.log('🚉 Station event received:', topic);
                 this.handleStationEvent(topic, payload, message);
             });
 
             // Subscribe to alert raised events
             await window.solaceTrainMonitor.subscribe('tms/alert/raised/>', (topic, payload, message) => {
-                // // console.log('🚨 Alert raised event received:', topic);
                 this.handleAlertRaisedEvent(topic, payload, message);
             });
 
             // Subscribe to alert missed events
             await window.solaceTrainMonitor.subscribe('tms/alert/missed/>', (topic, payload, message) => {
-                // // console.log('🚨 Alert missed event received:', topic);
                 this.handleAlertMissedEvent(topic, payload, message);
             });
 
             // Subscribe to alert served events
             await window.solaceTrainMonitor.subscribe('tms/alert/served/>', (topic, payload, message) => {
-                // // console.log('🚨 Alert served event received:', topic);
                 this.handleAlertServedEvent(topic, payload, message);
             });
 

@@ -123,7 +123,6 @@ class MultiTrainManager {
      * Initialize the multi-train manager
      */
     async initialize(dataManager) {
-        console.log('🚂 MultiTrainManager: Initializing independent multi-train system...');
         
         try {
         // Get the map from the existing single-train system
@@ -131,10 +130,6 @@ class MultiTrainManager {
             this.map = window.trainMonitorInstance.map;
             
             // Debug map state
-            console.log(`🗺️ MultiTrainManager: Map instance found`);
-            console.log(`🗺️ MultiTrainManager: Current map center: ${this.map.getCenter()}`);
-            console.log(`🗺️ MultiTrainManager: Current map zoom: ${this.map.getZoom()}`);
-            console.log(`🗺️ MultiTrainManager: Map container: ${this.map.getContainer().id}`);
             
             // Ensure a dedicated pane for canvas train markers above default markers
             if (!this.map.getPane('trainCanvasPane')) {
@@ -152,7 +147,6 @@ class MultiTrainManager {
             this.patchTooltipSystem();
 
             // Zoom level will be set in setInitialMapBounds() method
-            console.log(`🗺️ MultiTrainManager: Map ready for initialization, current zoom: ${this.map.getZoom()}`);
         } else {
             throw new Error('Map not available from single-train system');
         }
@@ -193,7 +187,6 @@ class MultiTrainManager {
             }
         
         this.isInitialized = true;
-        console.log('✅ MultiTrainManager: Initialized successfully');
         } catch (error) {
             console.error('❌ MultiTrainManager: Initialization failed:', error);
             throw error;
@@ -204,7 +197,6 @@ class MultiTrainManager {
      * Load trains from data manager
      */
     async loadTrainsFromDataManager(dataManager) {
-        console.log('📊 MultiTrainManager: Loading trains from data manager...');
         
         // Load train data directly from CSV like the single-train system does
         try {
@@ -293,7 +285,6 @@ class MultiTrainManager {
                 }
             });
 
-            console.log(`✅ MultiTrainManager: Loaded ${loadedCount} trains with valid routes`);
         } catch (error) {
             console.error('❌ MultiTrainManager: Failed to load train data:', error);
         }
@@ -340,7 +331,6 @@ class MultiTrainManager {
      * Load train data from CSV
      */
     async loadTrainData() {
-        console.log('📊 MultiTrainManager: Loading train data...');
         
         try {
             const response = await fetch('assets/data/vandebharath.csv');
@@ -359,7 +349,6 @@ class MultiTrainManager {
                 }
             });
             
-            console.log(`✅ MultiTrainManager: Loaded ${this.trains.size} trains`);
         } catch (error) {
             console.error('❌ MultiTrainManager: Failed to load train data:', error);
             throw error;
@@ -485,7 +474,6 @@ class MultiTrainManager {
      * Set initial map bounds ONCE at the beginning
      */
     setInitialMapBounds() {
-        console.log('🗺️ MultiTrainManager: Setting initial map bounds...');
         
         // Calculate bounds from all train routes
         const bounds = L.latLngBounds();
@@ -501,8 +489,6 @@ class MultiTrainManager {
         });
         
         if (hasValidBounds) {
-            console.log(`🗺️ MultiTrainManager: Setting bounds from train data`);
-            console.log(`🗺️ MultiTrainManager: Bounds: SW(${bounds.getSouthWest().lat}, ${bounds.getSouthWest().lng}) to NE(${bounds.getNorthEast().lat}, ${bounds.getNorthEast().lng})`);
             
             // Set map view ONCE and keep it stable - ENFORCE zoom level 5
             this.map.fitBounds(bounds, { 
@@ -513,22 +499,18 @@ class MultiTrainManager {
             // Force zoom level to 5 after fitBounds (in case it was overridden)
             setTimeout(() => {
                 this.map.setZoom(5);
-                console.log(`🗺️ MultiTrainManager: Enforced zoom level 5 after fitBounds`);
             }, 100);
             
         } else {
             // Fallback to India bounds - ENFORCE zoom level 5
-            console.log('🗺️ MultiTrainManager: Using fallback India bounds');
             this.map.setView([20.5937, 78.9629], 5);
         }
         
         // Final enforcement of zoom level 5
         setTimeout(() => {
             this.map.setZoom(5);
-            console.log(`🗺️ MultiTrainManager: Final zoom level enforcement: ${this.map.getZoom()}`);
         }, 200);
         
-        console.log('🗺️ MultiTrainManager: Initial map bounds set - map will remain stable during marker creation');
     }
 
     /**

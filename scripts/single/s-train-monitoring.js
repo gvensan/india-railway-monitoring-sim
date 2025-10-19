@@ -792,7 +792,6 @@ class TrainMonitor {
             // Subscribe to train events for real-time updates
             await this.setupSolaceSubscriptions();
             
-            console.log(`✅ Connected to ${brokerType} broker successfully`);
             return true;
         } catch (error) {
             console.error('❌ Failed to connect to broker:', error);
@@ -1158,16 +1157,13 @@ class TrainMonitor {
 
     // Alert flag management
     addAlertFlag(stationCode, alertCount) {
-        // // console.log(`🚩 Current alert flags:`, Array.from(this.alertFlags.keys()));
         
         if (!this.map) {
-            // console.warn('🚩 Map not available for flag creation');
             return;
         }
         
         // Check if station coordinates are loaded
         if (typeof stationCoordinatesFromCSV === 'undefined' || Object.keys(stationCoordinatesFromCSV).length === 0) {
-            // console.warn(`🚩 Station coordinates not loaded yet, deferring flag creation for ${stationCode}`);
             // Retry after a short delay
             setTimeout(() => this.addAlertFlag(stationCode, alertCount), 500);
             return;
@@ -1188,7 +1184,6 @@ class TrainMonitor {
         }
         
         if (!station || !station.lat || !station.lng) {
-            // console.warn(`🚩 Station ${stationCode} not found or missing coordinates`, {                                                                     
             //     station: station,
             //     stationsCount: this.stations?.length || 0,
             //     csvStationsCount: typeof stationCoordinatesFromCSV !== 'undefined' ? Object.keys(stationCoordinatesFromCSV).length : 0                          
@@ -1231,7 +1226,6 @@ class TrainMonitor {
         
         // Use actual alert count from details instead of parameter
         const actualAlertCount = alertDetails ? alertDetails.length : 0;
-        // // console.log(`🚩 Alert count mismatch - parameter: ${alertCount}, actual: ${actualAlertCount}`);
         
         // Create tooltip content matching station tooltip format
         const tooltipContent = document.createElement('div');
@@ -1524,18 +1518,10 @@ class TrainMonitor {
             return [];
         }
         
-        // // console.log(`🚩 getAlertDetailsForStation: Looking for station ${stationCode}`);
-        // // console.log(`🚩 Available alert tracker keys:`, Array.from(window.eventManager.alertTracker.keys()));
         
         // Find the station key that matches the station code
         for (const [key, data] of window.eventManager.alertTracker.entries()) {
             if (key.startsWith(`${stationCode}_`)) {
-                // // console.log(`🚩 Found station data for ${stationCode}:`, {
-                //     key: key,
-                //     received: data.alerts.received?.length || 0,
-                //     served: data.alerts.served?.length || 0,
-                //     missed: data.alerts.missed?.length || 0
-                // });
                 return data.alerts.received || [];
             }
         }
