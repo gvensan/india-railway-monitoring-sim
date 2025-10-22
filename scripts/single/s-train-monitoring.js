@@ -3311,8 +3311,13 @@ class TrainMonitor {
             if (popup.parentElement) {
                 popup.remove();
                 document.removeEventListener('keydown', handleEscape);
+                // Clean up global reference
+                delete window.closePopup;
             }
         };
+        
+        // Make closePopup globally accessible for onclick handlers
+        window.closePopup = closePopup;
         
         popup.innerHTML = `
             <div class="popup-content">
