@@ -255,11 +255,11 @@
                 delete window.BROKER_LIMIT_HISTORY;
                 delete window.BROKER_BATCH_LIMIT;
                 const NOISY = ['log', 'debug'];
-                NOISY.forEach(fn => {
-                    if (console && typeof console[fn] === 'function') {
-                        console[fn] = function () {};
-                    }
-                });
+                // NOISY.forEach(fn => {
+                //     if (console && typeof console[fn] === 'function') {
+                //         console[fn] = function () {};
+                //     }
+                // });
                 // Handle tab visibility: auto-pause on hide, auto-resume on show (if previously running)
                 document.addEventListener('visibilitychange', () => {
                     try {
@@ -302,13 +302,13 @@
     <script src="scripts/broker-config.js"></script>
     
     <!-- Broker Configuration Dialog -->
-    <script src="scripts/broker-config-dialog.js"></script>
+    <script src="scripts/broker-config-dialog.js?v=20251022-2405"></script>
     
     <!-- In-Memory Broker -->
     <script src="scripts/in-memory-broker.js"></script>
     
     <!-- Solace Integration Script -->
-    <script src="scripts/solace-integration.js"></script>
+    <script src="scripts/solace-integration.js?v=20251022-2405"></script>
     
     <!-- Event Manager Script -->
     <script src="scripts/event-manager.js"></script>

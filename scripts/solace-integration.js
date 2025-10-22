@@ -5,6 +5,9 @@
  * with default settings for publishing and subscribing to train monitoring events.
  */
 
+// Debug: Confirm this updated version is loading
+console.log('🔧 Solace Integration Script Loaded - Version 20251022-2405 with CRITICAL FIX');
+
 // Suppress verbose Solace library errors and show simplified messages
 (function() {
     const originalConsoleError = console.error;
@@ -109,9 +112,30 @@ class SolaceTrainMonitor {
         // Check for stored broker configuration first
         if (typeof window !== 'undefined' && window.BrokerConfig) {
             const storedConfig = window.BrokerConfig.getStoredBrokerConfig();
-            if (storedConfig && storedConfig.brokerType === 'solace' && storedConfig.config) {
-                // console.log('📋 Using stored Solace broker configuration');
-                return storedConfig.config;
+            if (storedConfig) {
+                if (storedConfig.brokerType === 'solace' && storedConfig.config) {
+                    console.log('📋 Using stored Solace broker configuration');
+                    // Ensure brokerType is included in the returned config
+                    return {
+                        ...storedConfig.config,
+                        brokerType: 'solace'
+                    };
+                } else if (storedConfig.brokerType === 'inmemory') {
+                    console.log('📋 Using stored in-memory broker configuration');
+                    // Return in-memory broker config
+                    return {
+                        brokerType: 'inmemory',
+                        url: 'ws://localhost:8008', // Not used for in-memory
+                        vpnName: 'default',
+                        userName: 'default',
+                        password: 'default',
+                        clientName: `train-monitor-${Date.now()}`,
+                        connectionTimeout: 10000,
+                        reconnectRetries: 5,
+                        reconnectInterval: 3000,
+                        logLevel: 'INFO'
+                    };
+                }
             }
             
             // Fallback to default configuration
@@ -121,6 +145,7 @@ class SolaceTrainMonitor {
         // Fallback to default configuration if external config is not available
         // console.warn('⚠️ BrokerConfig not found, using fallback configuration');
         return {
+            brokerType: 'solace', // Default to Solace if no config available
             url: 'ws://localhost:8008',
             vpnName: 'default',
             userName: 'default',
@@ -150,22 +175,56 @@ class SolaceTrainMonitor {
             const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
             const preferredBrokerType = storedConfig ? storedConfig.brokerType : null;
         
-        // If in-memory broker is preferred, check if we should still try Solace first
+        // If user has explicitly configured a broker type, respect their choice
         if (preferredBrokerType === 'inmemory') {
-            // console.log('🧠 In-memory broker preferred in stored config');
+            console.log('🧠 User configured in-memory broker - using in-memory broker');
+            try {
+                await this.connectToInMemoryBroker();
+                this.brokerType = 'inmemory';
+                window.brokerMode = 'inmemory';
+                window.brokerConnected = true;
+                this.updateBrokerStatusIndicator();
+                console.log('✅ Connected to in-memory broker (user configured)');
+                return true;
+            } catch (error) {
+                console.error('❌ Failed to connect to in-memory broker:', error);
+                window.brokerConnected = false;
+                this.updateBrokerStatusIndicator();
+                throw error;
+            }
+        } else if (preferredBrokerType === 'solace') {
+            console.log('☁️ User configured Solace broker - attempting Solace connection');
+            console.log('🔍 Broker config for Solace connection:', this.brokerConfig);
             
-            // Check if we're in a hosted environment (GitHub Pages, etc.)
-            if (window.BrokerConfig && window.BrokerConfig.isHostedEnvironment()) {
-                // console.log('🌐 Hosted environment detected, using in-memory broker as preferred');
+            // Reset connection failure state since user explicitly chose Solace
+            this.resetConnectionFailureState();
+            
+            // Actually attempt Solace connection since user explicitly chose it
+            try {
+                console.log('🔄 Attempting to connect to Solace broker (user configured)...');
+                console.log('🔍 Using broker config:', this.brokerConfig);
+                this.connectionStartTime = Date.now();
+                await this.connectToSolace();
+                
+                // If successful, reset failure flag and set broker type
+                console.log('✅ Solace broker connected successfully!');
+                this.solaceConnectionFailed = false;
+                this.connectionAttempts = 0;
+                this.brokerType = 'solace';
+                window.brokerMode = 'solace';
+                window.brokerConnected = true;
+                this.updateBrokerStatusIndicator();
+                console.log('🔧 Broker state updated - type:', this.brokerType, 'mode:', window.brokerMode, 'connected:', window.brokerConnected);
+                
+                return true;
+                
+            } catch (error) {
+                // Handle Solace connection failure
+                console.log('❌ Solace connection failed, will fallback to in-memory broker:', error.message);
+                console.log('🔍 Error details:', error);
                 this.handleSolaceConnectionFailure();
                 
-                // Show notification for manual switch to in-memory broker
-                setTimeout(() => {
-                    this.showBrokerSwitchNotification('manual');
-                }, 1000); // Delay to ensure the page is fully loaded
-            } else {
-                // console.log('🏠 Local environment detected, attempting Solace connection despite stored preference');
-                // Continue to Solace connection attempt below
+                // Continue to fallback section below
             }
         } else if (this.shouldAttemptSolaceConnection()) {
             // Check if broker is likely unreachable for fast failure
@@ -175,17 +234,20 @@ class SolaceTrainMonitor {
             } else {
                 try {
                     // First, try to connect to Solace broker
-                    // console.log('🔄 Attempting to connect to Solace broker...');
+                    console.log('🔄 Attempting to connect to Solace broker...');
+                    console.log('🔍 Using broker config:', this.brokerConfig);
                     this.connectionStartTime = Date.now();
                     await this.connectToSolace();
                     
                     // If successful, reset failure flag and set broker type
+                    console.log('✅ Solace broker connected successfully!');
                     this.solaceConnectionFailed = false;
                     this.connectionAttempts = 0;
                     this.brokerType = 'solace';
                     window.brokerMode = 'solace';
                     window.brokerConnected = true;
                     this.updateBrokerStatusIndicator();
+                    console.log('🔧 Broker state updated - type:', this.brokerType, 'mode:', window.brokerMode, 'connected:', window.brokerConnected);
                     
                     // Clear any stored in-memory preference since Solace is working
                     if (preferredBrokerType === 'inmemory') {
@@ -200,7 +262,8 @@ class SolaceTrainMonitor {
                     
                 } catch (error) {
                     // Handle Solace connection failure
-                    // console.log('❌ Solace connection failed, will fallback to in-memory broker:', error.message);
+                    console.log('❌ Solace connection failed, will fallback to in-memory broker:', error.message);
+                    console.log('🔍 Error details:', error);
                     this.handleSolaceConnectionFailure();
                     
                     // If we've reached max attempts, the fallback will be handled by handleSolaceConnectionFailure
@@ -214,7 +277,7 @@ class SolaceTrainMonitor {
         // Fallback to in-memory broker (only if not already switched)
         if (this.brokerType !== 'inmemory') {
             try {
-                // console.log('🔄 FALLBACK: Connecting to in-memory broker (Solace connection failed or not attempted)...');
+                console.log('🔄 FALLBACK: Connecting to in-memory broker (Solace connection failed or not attempted)...');
                 await this.connectToInMemoryBroker();
                 
                 // Set broker type and update global state
@@ -223,9 +286,9 @@ class SolaceTrainMonitor {
                 window.brokerConnected = true;
                 this.updateBrokerStatusIndicator();
                 
-                // console.log('✅ FALLBACK: Connected to in-memory broker successfully');
-                // console.log('🔍 Broker type set to:', this.brokerType);
-                // console.log('🔍 Global broker mode:', window.brokerMode);
+                console.log('✅ FALLBACK: Connected to in-memory broker successfully');
+                console.log('🔍 Broker type set to:', this.brokerType);
+                console.log('🔍 Global broker mode:', window.brokerMode);
                 return true;
                 
             } catch (inMemoryError) {
@@ -239,6 +302,14 @@ class SolaceTrainMonitor {
             return true;
         }
         
+        } catch (error) {
+            console.error('❌ Connection failed:', error);
+            // Ensure we're in a clean state
+            this.brokerType = 'inmemory';
+            window.brokerMode = 'inmemory';
+            window.brokerConnected = false;
+            this.updateBrokerStatusIndicator();
+            throw error;
         } finally {
             this.isConnecting = false;
         }
@@ -269,24 +340,36 @@ class SolaceTrainMonitor {
     shouldAttemptSolaceConnection() {
         const now = Date.now();
         
+        console.log('🔍 shouldAttemptSolaceConnection() check:', {
+            connectionAttempts: this.connectionAttempts,
+            maxConnectionAttempts: this.maxConnectionAttempts,
+            solaceConnectionFailed: this.solaceConnectionFailed,
+            lastConnectionAttempt: this.lastConnectionAttempt,
+            cooldownPeriod: this.connectionCooldown,
+            timeSinceLastAttempt: now - this.lastConnectionAttempt
+        });
+        
         // If we've never failed, always try
         if (!this.solaceConnectionFailed) {
+            console.log('✅ No previous failures, attempting Solace connection');
             return true;
         }
         
         // If we've failed but haven't exceeded max attempts, try again
         if (this.connectionAttempts < this.maxConnectionAttempts) {
+            console.log('✅ Under max attempts, attempting Solace connection');
             return true;
         }
         
         // If we've exceeded max attempts, check cooldown period
         if (now - this.lastConnectionAttempt > this.connectionCooldown) {
-            // console.log('🔄 Cooldown period expired, resetting connection attempts');
+            console.log('🔄 Cooldown period expired, resetting connection attempts');
             this.connectionAttempts = 0;
             this.solaceConnectionFailed = false;
             return true;
         }
         
+        console.log('⏭️ Max attempts reached and still in cooldown, skipping Solace connection');
         return false;
     }
 
@@ -490,21 +573,34 @@ class SolaceTrainMonitor {
      * Reset connection failure state (for manual retry)
      */
     resetConnectionFailureState() {
+        console.log('🔄 Resetting connection failure state...');
+        console.log('🔍 Previous state:', {
+            solaceConnectionFailed: this.solaceConnectionFailed,
+            connectionAttempts: this.connectionAttempts,
+            lastConnectionAttempt: this.lastConnectionAttempt
+        });
+        
         this.solaceConnectionFailed = false;
         this.connectionAttempts = 0;
         this.lastConnectionAttempt = 0;
-        // console.log('🔄 Connection failure state reset. Will attempt Solace connection on next connect.');
+        
+        console.log('✅ Connection failure state reset. Will attempt Solace connection on next connect.');
     }
 
     /**
      * Connect to Solace broker
      */
     async connectToSolace() {
+        console.log('🔧 connectToSolace() called');
+        console.log('🔍 Broker config:', this.brokerConfig);
+        
         // Check if Solace library is available
         if (typeof solace === 'undefined') {
+            console.error('❌ Solace library not available');
             throw new Error('Solace library not available');
         }
 
+        console.log('🔧 Creating Solace session...');
         // Create session with minimal retry settings
             this.session = solace.SolclientFactory.createSession({
                 url: this.brokerConfig.url,
@@ -519,9 +615,11 @@ class SolaceTrainMonitor {
             reconnectRetryWaitInMsecs: 0
             });
 
+            console.log('🔧 Setting up event handlers...');
             // Set up event handlers
             this.setupEventHandlers();
 
+            console.log('🔧 Connecting to Solace broker...');
             // Connect to broker
             this.session.connect();
             
@@ -532,6 +630,7 @@ class SolaceTrainMonitor {
             // Set timeout for connection - very short timeout to fail fast
             setTimeout(() => {
                 if (!this.isConnected) {
+                    console.log('⏰ Solace connection timeout after 3 seconds');
                     // Force disconnect to stop internal retries
                     if (this.session) {
                         try {
@@ -580,7 +679,7 @@ class SolaceTrainMonitor {
      */
     setupEventHandlers() {
         this.session.on(solace.SessionEventCode.UP_NOTICE, () => {
-            // console.log('✅ Connected to Solace broker successfully');
+            console.log('✅ Connected to Solace broker successfully');
             this.isConnected = true;
             if (this.connectionPromise) {
                 this.connectionPromise.resolve();
@@ -600,7 +699,7 @@ class SolaceTrainMonitor {
                 errorInfo = 'Connection failed (unable to get error details)';
             }
             
-            // console.error('❌ Failed to connect to Solace broker:', errorInfo);
+            console.error('❌ Failed to connect to Solace broker:', errorInfo);
             this.isConnected = false;
             
             // Force disconnect to stop internal retries
@@ -837,14 +936,34 @@ class SolaceTrainMonitor {
      * Disconnect from Solace broker
      */
     async disconnect() {
+        console.log('🔌 disconnect() called');
+        console.log('🔍 Current state:', {
+            hasSession: !!this.session,
+            isConnected: this.isConnected,
+            brokerType: this.brokerType
+        });
+        
         if (this.session && this.isConnected) {
             try {
-                // console.log('🔄 Disconnecting from Solace broker...');
+                console.log('🔄 Disconnecting from Solace broker...');
                 this.session.disconnect();
                 this.isConnected = false;
-                // console.log('✅ Disconnected from Solace broker');
+                console.log('✅ Disconnected from Solace broker');
             } catch (error) {
-                // console.error('❌ Error disconnecting from Solace broker:', error);
+                console.error('❌ Error disconnecting from Solace broker:', error);
+            }
+        } else {
+            console.log('⏭️ No active session to disconnect');
+        }
+        
+        // Also disconnect in-memory broker if it exists
+        if (this.broker && typeof this.broker.disconnect === 'function') {
+            try {
+                console.log('🔄 Disconnecting from in-memory broker...');
+                await this.broker.disconnect();
+                console.log('✅ Disconnected from in-memory broker');
+            } catch (error) {
+                console.error('❌ Error disconnecting from in-memory broker:', error);
             }
         }
     }
@@ -902,11 +1021,46 @@ class SolaceTrainMonitor {
             
             // Add click handler to open broker configuration dialog
             indicator.addEventListener('click', () => {
-                // console.log('🔧 Broker icon clicked - opening configuration dialog');
+                console.log('🔧 Broker icon clicked - opening configuration dialog');
+                console.log('🔧 window.openBrokerConfigDialog available:', typeof window.openBrokerConfigDialog);
+                console.log('🔧 window.brokerConfigDialog available:', typeof window.brokerConfigDialog);
+                
                 if (window.openBrokerConfigDialog) {
                     window.openBrokerConfigDialog();
+                } else if (window.brokerConfigDialog) {
+                    console.log('🔧 Using direct dialog access');
+                    window.brokerConfigDialog.openDialog();
                 } else {
-                    // console.warn('⚠️ openBrokerConfigDialog function not available');
+                    console.error('❌ Neither openBrokerConfigDialog function nor brokerConfigDialog available');
+                    // Try to initialize the dialog on demand
+                    console.log('🔧 Attempting to initialize dialog on demand');
+                    try {
+                        if (typeof BrokerConfigDialog !== 'undefined') {
+                            window.brokerConfigDialog = new BrokerConfigDialog();
+                            window.openBrokerConfigDialog = openBrokerConfigDialog;
+                            window.closeBrokerConfigDialog = closeBrokerConfigDialog;
+                            console.log('🔧 Dialog initialized on demand, opening now');
+                            window.brokerConfigDialog.openDialog();
+                        } else {
+                            // Try to find and show the dialog directly
+                            const dialog = document.getElementById('broker-config-dialog');
+                            if (dialog) {
+                                console.log('🔧 Found dialog element directly, showing it');
+                                dialog.style.display = 'flex';
+                                // Also try to load current config if dialog object exists
+                                if (window.brokerConfigDialog && window.brokerConfigDialog.loadCurrentConfig) {
+                                    window.brokerConfigDialog.loadCurrentConfig();
+                                }
+                            } else {
+                                console.error('❌ Dialog element not found in DOM');
+                                // List all elements with 'broker' in the id
+                                const allElements = document.querySelectorAll('[id*="broker"]');
+                                console.log('🔍 Elements with "broker" in ID:', Array.from(allElements).map(el => el.id));
+                            }
+                        }
+                    } catch (error) {
+                        console.error('❌ Error initializing dialog on demand:', error);
+                    }
                 }
             });
             
@@ -1191,13 +1345,52 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Create global instance
         window.solaceTrainMonitor = new SolaceTrainMonitor();
         
-        // Auto-connect based on environment and configuration
-        if (window.solaceTrainMonitor.brokerConfig.brokerType === 'inmemory') {
-            // console.log('🧠 Auto-connecting to in-memory broker (configured for hosted environment)');
-            window.solaceTrainMonitor.connectToInMemoryBroker();
+        // Auto-connect based on stored user configuration or environment detection
+        const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
+        console.log('🔍 Auto-connect check:', {
+            storedConfig: storedConfig,
+            brokerConfig: window.solaceTrainMonitor.brokerConfig,
+            windowBrokerMode: window.brokerMode
+        });
+        
+        // Determine broker type based on priority: stored config > environment default
+        let targetBrokerType = 'solace'; // default fallback
+        
+        if (storedConfig && storedConfig.brokerType) {
+            targetBrokerType = storedConfig.brokerType;
+            console.log('🔧 Using stored broker configuration:', targetBrokerType);
+        } else if (window.solaceTrainMonitor.brokerConfig.brokerType) {
+            targetBrokerType = window.solaceTrainMonitor.brokerConfig.brokerType;
+            console.log('🔧 Using environment default broker configuration:', targetBrokerType);
+        }
+        
+        // Connect based on determined broker type
+        if (targetBrokerType === 'inmemory') {
+            console.log('🧠 Auto-connecting to in-memory broker');
+            try {
+                window.solaceTrainMonitor.brokerType = 'inmemory';
+                window.brokerMode = 'inmemory';
+                await window.solaceTrainMonitor.connectToInMemoryBroker();
+                window.brokerConnected = true;
+                window.solaceTrainMonitor.updateBrokerStatusIndicator();
+                console.log('✅ Auto-connected to in-memory broker successfully');
+            } catch (error) {
+                console.error('❌ Failed to auto-connect to in-memory broker:', error);
+                window.brokerConnected = false;
+                window.solaceTrainMonitor.updateBrokerStatusIndicator();
+            }
         } else {
-            // console.log('☁️ Auto-connecting to Solace broker');
-            window.solaceTrainMonitor.connect();
+            console.log('☁️ Auto-connecting to Solace broker');
+            if (storedConfig && storedConfig.config) {
+                console.log('🔍 Using stored Solace config:', storedConfig.config);
+            }
+            console.log('🔍 About to call connect() method...');
+            // Use the connect() method which handles Solace connection and fallback
+            window.solaceTrainMonitor.connect().then(() => {
+                console.log('🔧 Connect() method completed');
+            }).catch((error) => {
+                console.error('❌ Connect() method failed:', error);
+            });
         }
         
         // console.log('🚂 Solace integration ready. Use window.solaceTrainMonitor to interact with the broker.');

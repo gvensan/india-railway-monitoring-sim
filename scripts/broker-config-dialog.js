@@ -3,6 +3,9 @@
  * Handles the broker configuration popup dialog and broker switching
  */
 
+// Debug: Confirm this updated version is loading
+console.log('🔧 Broker Config Dialog Script Loaded - Version 20251022-2358 with Enhanced Debugging');
+
 class BrokerConfigDialog {
     constructor() {
         this.dialog = null;
@@ -21,13 +24,21 @@ class BrokerConfigDialog {
     }
 
     setupDialog() {
+        console.log('🔧 Setting up broker configuration dialog');
         this.dialog = document.getElementById('broker-config-dialog');
         this.form = document.getElementById('broker-config-form');
         this.solaceFields = document.getElementById('solace-config-fields');
         this.hostedNote = document.getElementById('hosted-environment-note');
 
+        console.log('🔧 Dialog elements found:', {
+            dialog: !!this.dialog,
+            form: !!this.form,
+            solaceFields: !!this.solaceFields,
+            hostedNote: !!this.hostedNote
+        });
+
         if (!this.dialog || !this.form || !this.solaceFields) {
-            // console.error('❌ Broker configuration dialog elements not found');
+            console.error('❌ Broker configuration dialog elements not found');
             return;
         }
 
@@ -59,6 +70,14 @@ class BrokerConfigDialog {
             this.saveConfiguration();
         });
 
+        // Broker type change handler
+        this.form.addEventListener('change', (e) => {
+            if (e.target.name === 'brokerType') {
+                const showSolace = e.target.value === 'solace';
+                this.toggleSolaceFields(showSolace);
+            }
+        });
+
         // Close dialog on overlay click
         this.dialog.addEventListener('click', (e) => {
             if (e.target === this.dialog) {
@@ -78,13 +97,34 @@ class BrokerConfigDialog {
         try {
             // Get current broker configuration
             const currentConfig = window.BrokerConfig ? window.BrokerConfig.getBrokerConfig() : null;
-            let currentBrokerType = window.brokerMode || 'inmemory';
             
-            // Check if we're in a hosted environment and set appropriate default
+            // Check actual current broker mode first (most reliable)
+            let currentBrokerType = 'inmemory'; // default
+            
+            // Check if we have an active broker connection
+            if (window.solaceTrainMonitor && window.solaceTrainMonitor.brokerType) {
+                currentBrokerType = window.solaceTrainMonitor.brokerType;
+                console.log('🔧 Using actual broker type from active connection:', currentBrokerType);
+            } else if (window.brokerMode) {
+                currentBrokerType = window.brokerMode;
+                console.log('🔧 Using window.brokerMode:', currentBrokerType);
+            } else {
+                // Check for stored user configuration as fallback
+                const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
+                if (storedConfig && storedConfig.brokerType) {
+                    currentBrokerType = storedConfig.brokerType;
+                    console.log('🔧 Using stored broker configuration as fallback:', currentBrokerType);
+                } else {
+                    // Only apply hosted environment default if no user configuration exists
+                    if (window.BrokerConfig && window.BrokerConfig.isHostedEnvironment()) {
+                        currentBrokerType = 'inmemory';
+                        console.log('🌐 Hosted environment detected, defaulting to in-memory broker (no user config)');
+                    }
+                }
+            }
+            
+            // Show/hide hosted environment note based on environment detection
             if (window.BrokerConfig && window.BrokerConfig.isHostedEnvironment()) {
-                currentBrokerType = 'inmemory';
-                // console.log('🌐 Hosted environment detected, defaulting to in-memory broker');
-                
                 // Show hosted environment note
                 if (this.hostedNote) {
                     this.hostedNote.style.display = 'block';
@@ -97,17 +137,26 @@ class BrokerConfigDialog {
             }
 
             // Set broker type
+            console.log('🔧 Dialog loading - setting broker type to:', currentBrokerType);
+            console.log('🔧 Current state check:', {
+                windowBrokerMode: window.brokerMode,
+                solaceTrainMonitorBrokerType: window.solaceTrainMonitor ? window.solaceTrainMonitor.brokerType : 'not available',
+                brokerConnected: window.brokerConnected
+            });
+            
             const brokerTypeRadio = this.form.querySelector(`input[name="brokerType"][value="${currentBrokerType}"]`);
             if (brokerTypeRadio) {
                 brokerTypeRadio.checked = true;
                 this.toggleSolaceFields(currentBrokerType === 'solace');
+                console.log('🔧 Dialog set to:', currentBrokerType, 'radio button checked');
+            } else {
+                console.error('❌ Could not find radio button for broker type:', currentBrokerType);
             }
 
             // Load Solace configuration - check both current config and stored config
             let solaceConfig = null;
             
-            // First, try to get stored Solace configuration
-            const storedConfig = window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : null;
+            // First, try to get stored Solace configuration (reuse storedConfig from above)
             if (storedConfig && storedConfig.brokerType === 'solace' && storedConfig.config) {
                 solaceConfig = storedConfig.config;
                 // console.log('📋 Loading stored Solace configuration');
@@ -197,23 +246,29 @@ class BrokerConfigDialog {
             let newConfig = null;
             
             if (brokerType === 'solace') {
+                // Get values from form fields
+                const url = document.getElementById('broker-url').value.trim();
+                const vpnName = document.getElementById('broker-vpn').value.trim();
+                const userName = document.getElementById('broker-username').value.trim();
+                const password = document.getElementById('broker-password').value.trim();
+
+                // Validate Solace configuration
+                if (!url || !vpnName || !userName || !password) {
+                    alert('Please fill in all Solace broker configuration fields.');
+                    return;
+                }
+
                 newConfig = {
-                    url: formData.get('url'),
-                    vpnName: formData.get('vpnName'),
-                    userName: formData.get('userName'),
-                    password: formData.get('password'),
+                    url: url,
+                    vpnName: vpnName,
+                    userName: userName,
+                    password: password,
                     clientName: 'train-monitor',
                     connectionTimeout: 10000,
                     reconnectRetries: 5,
                     reconnectInterval: 3000,
                     logLevel: 'INFO'
                 };
-
-                // Validate Solace configuration
-                if (!newConfig.url || !newConfig.vpnName || !newConfig.userName || !newConfig.password) {
-                    alert('Please fill in all Solace broker configuration fields.');
-                    return;
-                }
             }
 
             // Store configuration
@@ -240,24 +295,38 @@ class BrokerConfigDialog {
                 timestamp: new Date().toISOString()
             };
             localStorage.setItem('brokerConfig', JSON.stringify(configData));
+            console.log('💾 Broker configuration stored:', configData);
 
-            // Update global broker configuration
+            // Update global broker configuration and mode
             if (window.BrokerConfig) {
                 if (brokerType === 'solace' && config) {
                     // Update the default configuration
                     window.BrokerConfig.updateDefaultConfig(config);
+                    console.log('🔧 Updated default broker config:', config);
                 }
             }
 
-            // console.log('✅ Broker configuration saved:', configData);
+            // Set global broker mode to match user's choice
+            window.brokerMode = brokerType;
+            console.log('🔧 Broker mode set to:', window.brokerMode);
+
+            // Verify storage
+            const stored = localStorage.getItem('brokerConfig');
+            console.log('🔍 Verification - stored config:', stored ? JSON.parse(stored) : 'null');
         } catch (error) {
-            // console.error('❌ Error storing broker configuration:', error);
+            console.error('❌ Error storing broker configuration:', error);
         }
     }
 
     resetApplication() {
         try {
-            // console.log('🔄 Resetting application due to broker configuration change...');
+            console.log('🔄 Resetting application due to broker configuration change...');
+            console.log('🔍 Current state before reset:', {
+                brokerMode: window.brokerMode,
+                brokerConnected: window.brokerConnected,
+                solaceTrainMonitor: window.solaceTrainMonitor ? 'exists' : 'null',
+                storedConfig: localStorage.getItem('brokerConfig')
+            });
 
             // Show loading message
             this.showResetMessage();
@@ -265,14 +334,15 @@ class BrokerConfigDialog {
             // Disconnect current broker
             if (window.solaceTrainMonitor) {
                 try {
+                    console.log('🔌 Disconnecting current broker...');
                     window.solaceTrainMonitor.disconnect();
+                    console.log('✅ Broker disconnected');
                 } catch (error) {
-                    // console.warn('⚠️ Error disconnecting current broker:', error);
+                    console.warn('⚠️ Error disconnecting current broker:', error);
                 }
             }
 
-            // Clear global state
-            window.brokerMode = undefined;
+            // Clear global state (but preserve brokerMode as it will be restored from localStorage)
             window.brokerConnected = false;
             window.solaceTrainMonitor = null;
             window.eventManager = null;
@@ -284,10 +354,12 @@ class BrokerConfigDialog {
                 existingIndicator.remove();
             }
 
-            // Reload the page after a short delay
+            // Reload the page after a short delay to ensure configuration is stored
             setTimeout(() => {
+                console.log('🔄 Reloading page to apply new broker configuration...');
+                console.log('🔍 Final stored config before reload:', localStorage.getItem('brokerConfig'));
                 window.location.reload();
-            }, 2000);
+            }, 1000);
 
         } catch (error) {
             // console.error('❌ Error resetting application:', error);
@@ -324,7 +396,16 @@ class BrokerConfigDialog {
     }
 
     openDialog() {
+        console.log('🔧 openDialog called, dialog element:', this.dialog);
         if (this.dialog) {
+            console.log('🔧 Current state before loading config:', {
+                windowBrokerMode: window.brokerMode,
+                solaceTrainMonitorBrokerType: window.solaceTrainMonitor ? window.solaceTrainMonitor.brokerType : 'not available',
+                brokerConnected: window.brokerConnected,
+                storedConfig: window.BrokerConfig ? window.BrokerConfig.getStoredBrokerConfig() : 'not available'
+            });
+            
+            console.log('🔧 Loading current config and showing dialog');
             this.loadCurrentConfig();
             this.dialog.style.display = 'flex';
             // Focus on the first input
@@ -332,6 +413,8 @@ class BrokerConfigDialog {
                 const firstInput = this.dialog.querySelector('input');
                 if (firstInput) firstInput.focus();
             }, 100);
+        } else {
+            console.error('❌ Dialog element not found');
         }
     }
 
@@ -344,21 +427,76 @@ class BrokerConfigDialog {
 
 // Global functions for HTML onclick handlers
 function openBrokerConfigDialog() {
+    console.log('🔧 openBrokerConfigDialog called');
     if (window.brokerConfigDialog) {
+        console.log('🔧 Opening broker configuration dialog');
         window.brokerConfigDialog.openDialog();
+    } else {
+        console.error('❌ window.brokerConfigDialog not available');
     }
 }
 
 function closeBrokerConfigDialog() {
+    console.log('🔧 closeBrokerConfigDialog called');
     if (window.brokerConfigDialog) {
         window.brokerConfigDialog.closeDialog();
+    } else {
+        console.error('❌ window.brokerConfigDialog not available for closing');
+        // Fallback: try to hide the dialog directly
+        const dialog = document.getElementById('broker-config-dialog');
+        if (dialog) {
+            dialog.style.display = 'none';
+        }
     }
 }
 
+// Make functions available globally immediately
+window.openBrokerConfigDialog = openBrokerConfigDialog;
+window.closeBrokerConfigDialog = closeBrokerConfigDialog;
+
 // Initialize the dialog when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('🔧 DOM loaded, initializing broker configuration dialog');
     window.brokerConfigDialog = new BrokerConfigDialog();
+    // Ensure the global function is available
+    window.openBrokerConfigDialog = openBrokerConfigDialog;
+    window.closeBrokerConfigDialog = closeBrokerConfigDialog;
+    console.log('🔧 Broker configuration dialog initialized');
+    console.log('🔧 Global functions available:', {
+        openBrokerConfigDialog: typeof window.openBrokerConfigDialog,
+        closeBrokerConfigDialog: typeof window.closeBrokerConfigDialog,
+        brokerConfigDialog: typeof window.brokerConfigDialog
+    });
 });
+
+// Also try to initialize immediately if DOM is already ready
+if (document.readyState === 'loading') {
+    // DOM is still loading, wait for DOMContentLoaded
+} else {
+    // DOM is already ready, initialize immediately
+    console.log('🔧 DOM already ready, initializing broker configuration dialog immediately');
+    try {
+        window.brokerConfigDialog = new BrokerConfigDialog();
+        window.openBrokerConfigDialog = openBrokerConfigDialog;
+        window.closeBrokerConfigDialog = closeBrokerConfigDialog;
+        console.log('🔧 Broker configuration dialog initialized immediately');
+    } catch (error) {
+        console.error('❌ Error initializing broker configuration dialog:', error);
+    }
+}
+
+// Add a simple fallback mechanism
+setTimeout(() => {
+    if (!window.brokerConfigDialog) {
+        console.log('🔧 Broker dialog not initialized after timeout, attempting fallback initialization');
+        try {
+            window.brokerConfigDialog = new BrokerConfigDialog();
+            console.log('🔧 Fallback initialization successful');
+        } catch (error) {
+            console.error('❌ Fallback initialization failed:', error);
+        }
+    }
+}, 1000);
 
 // Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
