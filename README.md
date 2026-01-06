@@ -2,7 +2,8 @@
 
 A comprehensive real-time train monitoring and simulation system for Indian Railways, featuring interactive maps, multi-train tracking, alert management, and event monitoring capabilities.
 
-<video src="images/output_linkedin_fast.mp4" controls muted playsinline></video>
+![Demo](images/output_linkedin_fast.gif)
+
 
 ## ⚠️ DISCLAIMER
 
