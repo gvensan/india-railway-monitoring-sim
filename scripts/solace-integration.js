@@ -1164,7 +1164,7 @@ class SolaceTrainMonitor {
         const origin = trainData.origin || 'UNKNOWN';
         const trainNumber = trainData.trainNumber || 'UNKNOWN';
         const destination = trainData.destination || 'UNKNOWN';
-        const topic = `tms/train/departed/origin/${origin}/${trainNumber}/${destination}`;
+        const topic = `tms/train/v1/departed/origin/${origin}/${trainNumber}/${destination}`;
         const payload = {
             status: "departed",
             origin: trainData.origin,
@@ -1191,7 +1191,7 @@ class SolaceTrainMonitor {
         const origin = trainData.origin || 'UNKNOWN';
         const trainNumber = trainData.trainNumber || 'UNKNOWN';
         const destination = trainData.destination || 'UNKNOWN';
-        const topic = `tms/train/arrived/destination/${origin}/${trainNumber}/${destination}`;
+        const topic = `tms/train/v1/arrived/destination/${origin}/${trainNumber}/${destination}`;
         const payload = {
             status: "arrived",
             origin: trainData.origin,
@@ -1220,8 +1220,8 @@ class SolaceTrainMonitor {
         const trainNumber = trainData.trainNumber || 'UNKNOWN';
         const nextStation = trainData.nextStation || 'NONE';
         const topic = trainData.nextStation ?
-        `tms/station/stopped/${currentStation}/${previousStation}/${trainNumber}/${nextStation}` :
-        `tms/station/stopped/${currentStation}/${previousStation}/${trainNumber}/${currentStation}`;        
+        `tms/station/v1/stopped/${currentStation}/${previousStation}/${trainNumber}/${nextStation}` :
+        `tms/station/v1/stopped/${currentStation}/${previousStation}/${trainNumber}/${currentStation}`;        
         const payload = {
             status: "stopped",
             previousStation: trainData.previousStation,
@@ -1249,8 +1249,8 @@ class SolaceTrainMonitor {
         const trainNumber = trainData.trainNumber || 'UNKNOWN';
         const nextStation = trainData.nextStation || 'NONE';
         const topic = trainData.nextStation ?
-        `tms/station/arrived/${currentStation}/${previousStation}/${trainNumber}/${nextStation}` :
-        `tms/station/arrived/${currentStation}/${previousStation}/${trainNumber}/${currentStation}`;        
+        `tms/station/v1/arrived/${currentStation}/${previousStation}/${trainNumber}/${nextStation}` :
+        `tms/station/v1/arrived/${currentStation}/${previousStation}/${trainNumber}/${currentStation}`;        
         const payload = {
             status: "arrived",
             previousStation: trainData.previousStation,
@@ -1277,7 +1277,7 @@ class SolaceTrainMonitor {
         const previousStation = trainData.previousStation || 'NONE';
         const trainNumber = trainData.trainNumber || 'UNKNOWN';
         const nextStation = trainData.nextStation || 'NONE';
-        const topic = `tms/station/departed/${currentStation}/${previousStation}/${trainNumber}/${nextStation}`;
+        const topic = `tms/station/v1/departed/${currentStation}/${previousStation}/${trainNumber}/${nextStation}`;
         const payload = {
             status: "departed",
             previousStation: trainData.previousStation,
@@ -1300,21 +1300,21 @@ class SolaceTrainMonitor {
      * Subscribe to all train events with dedicated handler
      */
     async subscribeToTrainEvents(handler) {
-        await this.subscribe('tms/train/>', handler);
+        await this.subscribe('tms/train/v1/>', handler);
     }
 
     /**
      * Subscribe to all station events with dedicated handler
      */
     async subscribeToStationEvents(handler) {
-        await this.subscribe('tms/station/>', handler);
+        await this.subscribe('tms/station/v1/>', handler);
     }
 
     /**
      * Subscribe to all alert events with dedicated handler
      */
     async subscribeToAlertNotificationEvents(handler) {
-        await this.subscribe('tms/alert/notify/>', handler);
+        await this.subscribe('tms/alert/v1/notify/>', handler);
     }
 
     /**

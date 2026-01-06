@@ -1515,6 +1515,14 @@ class MultiTrainManager {
      * Publish multi-train lifecycle events to broker (Solace or In-Memory)
      */
     publishMultiEvent(type, trainNumber, train, state) {
+        // Always clear unserved alerts at destination, even if publishing is disabled.
+        if (type === 'arrived_destination') {
+            const dest = train?.route?.[train.route.length - 1];
+            if (window.eventManager && dest) {
+                window.eventManager.clearUnservedAlertsAtDestination(trainNumber, dest.code, dest.name);
+            }
+        }
+
         // Check if event publishing is enabled
         if (!window.publishEvents) {
             console.log(`📤 Event publishing disabled, skipping ${type} for train ${trainNumber}`);
@@ -1572,12 +1580,6 @@ class MultiTrainManager {
                 } catch (_e) {}
             } else if (type === 'arrived_destination') {
                 broker.publishTrainArrivedDestination(payload);
-                // Clear any unserved alerts at destination (parity with single-train)
-                try {
-                    if (window.eventManager && dest) {
-                        window.eventManager.clearUnservedAlertsAtDestination(trainNumber, dest.code, dest.name);
-                    }
-                } catch (_e) {}
             }
             if (window && window.MULTI_EVENT_AUDIT) {
                 const code = payload.currentStation || payload.nextStation || payload.destination || '-';

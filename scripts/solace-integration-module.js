@@ -56,7 +56,7 @@ class SolaceIntegration {
         
         try {
             // Note: Legacy train/status/* and train/position/* subscriptions removed
-            // All train events are now handled through TMS topics (tms/train/*, tms/station/*, tms/alert/*)
+            // All train events are now handled through TMS topics (tms/train/v1/*, tms/station/v1/*, tms/alert/v1/*)
             // console.log('✅ Solace subscriptions set up successfully (using TMS topics only)');
         } catch (error) {
             // console.error('❌ Failed to set up Solace subscriptions:', error);

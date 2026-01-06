@@ -2,6 +2,8 @@
 
 A comprehensive real-time train monitoring and simulation system for Indian Railways, featuring interactive maps, multi-train tracking, alert management, and event monitoring capabilities.
 
+<video src="images/output_linkedin_fast.mp4" controls muted playsinline></video>
+
 ## ⚠️ DISCLAIMER
 
 This is a **simulation system** for demonstration purposes only. It does not use real-time data or connect to actual railway systems. All train information, schedules, and movements are simulated using sample data. For real train information, please refer to official Indian Railways sources.
@@ -47,6 +49,10 @@ npx serve .
 ```
 
 **Requirements**: Just a modern web browser and internet connection!
+
+### Configuration (Thunderforest Transport Tiles)
+The transport layer uses Thunderforest tiles. Set or replace the API key in `scripts/app-config.js`.
+For GitHub Pages demos this key is public by design; use a proxy if you need it to stay private.
 
 ## 🎮 How to Use
 

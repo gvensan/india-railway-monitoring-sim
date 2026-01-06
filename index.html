@@ -49,9 +49,15 @@
             <div class="control-section">
                 <div class="section-header">
                     <h3>Simulation Controls</h3>
-                    <div class="publish-events-control">
-                        <input type="checkbox" id="publishEventsCheckbox" class="publish-events-checkbox">
-                        <label for="publishEventsCheckbox">Publish Events</label>
+                    <div class="simulation-header-controls">
+                        <div class="generate-alerts-control">
+                            <input type="checkbox" id="generateAlertsCheckbox" class="generate-alerts-checkbox" checked>
+                            <label for="generateAlertsCheckbox">Generate Random Alerts</label>
+                        </div>
+                        <div class="publish-events-control">
+                            <input type="checkbox" id="publishEventsCheckbox" class="publish-events-checkbox" checked>
+                            <label for="publishEventsCheckbox">Publish Events</label>
+                        </div>
                     </div>
                 </div>
                 <div class="controls">
@@ -291,6 +297,9 @@
             } catch (e) { /* ignore */ }
         })();
     </script>
+    
+    <!-- App Configuration -->
+    <script src="scripts/app-config.js"></script>
     
     <!-- Solace JS API -->
     <script src="scripts/solclient.js"></script>
@@ -534,16 +543,39 @@
 
     <!-- Publish Events Control -->
     <script>
-        // Initialize publish events flag (default: false/unchecked)
-        window.publishEvents = false;
+        // Initialize simulation flags (default: true/checked)
+        window.generateAlerts = true;
+        window.publishEvents = true;
         
         // Add event listener for publish events checkbox
         document.addEventListener('DOMContentLoaded', function() {
             const publishEventsCheckbox = document.getElementById('publishEventsCheckbox');
             if (publishEventsCheckbox) {
+                publishEventsCheckbox.checked = true;
                 publishEventsCheckbox.addEventListener('change', function() {
                     window.publishEvents = this.checked;
                     console.log('Publish Events:', window.publishEvents ? 'Enabled' : 'Disabled');
+                });
+            }
+
+            const generateAlertsCheckbox = document.getElementById('generateAlertsCheckbox');
+            if (generateAlertsCheckbox) {
+                generateAlertsCheckbox.checked = true;
+                generateAlertsCheckbox.addEventListener('change', function() {
+                    window.generateAlerts = this.checked;
+                    const tm = window.trainMonitorInstance;
+                    if (!tm) return;
+                    if (!window.generateAlerts && tm.stopAlertGeneration) {
+                        tm.stopAlertGeneration();
+                        return;
+                    }
+                    if (window.generateAlerts && tm.startAlertGeneration) {
+                        if (window.multiTrainSystem && window.multiTrainSystem.isRunning) {
+                            tm.startAlertGeneration('multi');
+                        } else if (tm.isRunning) {
+                            tm.startAlertGeneration('single');
+                        }
+                    }
                 });
             }
         });

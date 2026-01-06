@@ -481,6 +481,15 @@ class AlertSystem {
             
             // Create comprehensive alert payload matching original structure
             const raisedTime = new Date().toISOString();
+            let nextStationCode = nextStation?.code || 'Unknown';
+            let nextStationName = nextStation?.name || 'Unknown';
+            if (nextStationCode === 'Unknown' && typeof this.trainMonitor.getCurrentTrainData === 'function') {
+                const derived = this.trainMonitor.getCurrentTrainData(trainNumber);
+                if (derived && derived.nextStation) {
+                    nextStationCode = derived.nextStation;
+                    nextStationName = derived.nextStationName || nextStationName;
+                }
+            }
             const alertPayload = {
                 type: alertType,                                    // Use 'type' instead of 'alertType'
                 trainNumber: trainNumber.toString(),               // Convert to string
@@ -488,8 +497,8 @@ class AlertSystem {
                 coachNumber: coachNumber || 'Unknown',             // Coach number included
                 previousStation: previousStation?.code || 'Unknown',
                 previousStationName: previousStation?.name || 'Unknown',
-                nextStation: nextStation?.code || 'Unknown',
-                nextStationName: nextStation?.name || 'Unknown',
+                nextStation: nextStationCode,
+                nextStationName: nextStationName,
                 distanceTraveled: this.trainMonitor.distanceTraveled || 0,
                 lat: currentPosition.lat,
                 lon: currentPosition.lng,                          // Note: original uses 'lon', not 'lng'
@@ -503,7 +512,7 @@ class AlertSystem {
             };
 
             // Publish alert event with proper topic structure
-            const topic = `tms/alert/raised/${alertType}/${trainNumber}/${nextStation?.code || 'Unknown'}`;
+            const topic = `tms/alert/v1/raised/${alertType}/${trainNumber}/${nextStationCode}`;
             await this.trainMonitor.solaceIntegration.publishAlertEvent(topic, alertPayload);
             
             // console.log(`⚠️ Alert raised: ${alertType} for train ${trainNumber}`);

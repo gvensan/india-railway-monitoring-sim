@@ -93,22 +93,22 @@ class EventManager {
             });
 
             // Subscribe to alert raised events
-            await window.solaceTrainMonitor.subscribe('tms/alert/raised/>', (topic, payload, message) => {
+            await window.solaceTrainMonitor.subscribe('tms/alert/v1/raised/>', (topic, payload, message) => {
                 this.handleAlertRaisedEvent(topic, payload, message);
             });
 
             // Subscribe to alert missed events
-            await window.solaceTrainMonitor.subscribe('tms/alert/missed/>', (topic, payload, message) => {
+            await window.solaceTrainMonitor.subscribe('tms/alert/v1/missed/>', (topic, payload, message) => {
                 this.handleAlertMissedEvent(topic, payload, message);
             });
 
             // Subscribe to alert served events
-            await window.solaceTrainMonitor.subscribe('tms/alert/served/>', (topic, payload, message) => {
+            await window.solaceTrainMonitor.subscribe('tms/alert/v1/served/>', (topic, payload, message) => {
                 this.handleAlertServedEvent(topic, payload, message);
             });
 
             // Subscribe to alert unserved events
-            await window.solaceTrainMonitor.subscribe('tms/alert/unserved/>', (topic, payload, message) => {
+            await window.solaceTrainMonitor.subscribe('tms/alert/v1/unserved/>', (topic, payload, message) => {
                 // // console.log('🚫 Alert unserved event received:', topic);
                 this.handleAlertUnservedEvent(topic, payload, message);
             });
@@ -642,7 +642,7 @@ class EventManager {
             return;
         }
         
-        const topic = `tms/alert/missed/${alertData.type}/${alertData.trainNumber}/${missedStation}`;
+        const topic = `tms/alert/v1/missed/${alertData.type}/${alertData.trainNumber}/${missedStation}`;
         const payload = {
             type: alertData.type,
             trainNumber: alertData.trainNumber,
@@ -684,7 +684,7 @@ class EventManager {
             return;
         }
         
-        const topic = `tms/alert/raised/${alertData.type}/${alertData.trainNumber}/${nextStation}`;
+        const topic = `tms/alert/v1/raised/${alertData.type}/${alertData.trainNumber}/${nextStation}`;
         
         if (reraised) {
             // console.log(`📤 Publishing alert re-raised event to topic: ${topic}`);
@@ -731,7 +731,7 @@ class EventManager {
             return;
         }
         
-        const topic = `tms/alert/served/${alertData.type}/${alertData.trainNumber}/${stationCode}`;
+        const topic = `tms/alert/v1/served/${alertData.type}/${alertData.trainNumber}/${stationCode}`;
         const payload = {
             type: alertData.type,
             trainNumber: alertData.trainNumber,
@@ -766,7 +766,7 @@ class EventManager {
             return;
         }
         
-        const topic = `tms/alert/unserved/${alertData.type}/${alertData.trainNumber}/${stationCode}`;
+        const topic = `tms/alert/v1/unserved/${alertData.type}/${alertData.trainNumber}/${stationCode}`;
         const payload = {
             type: alertData.type,
             trainNumber: alertData.trainNumber,
@@ -1442,6 +1442,7 @@ class EventManager {
                     <span class="event-time">${timeStr}</span>
                 </div>
                 <div class="event-brief">${event.brief}</div>
+                <div class="event-topic">${event.topic}</div>
                 <div class="event-details">
                     ${event.details.map(detail => `
                         <div class="event-detail-item">
@@ -1449,7 +1450,6 @@ class EventManager {
                             <span class="event-detail-value">${detail.value}</span>
                         </div>
                     `).join('')}
-                    <div class="event-topic">${event.topic}</div>
                 </div>
             </div>
         `;

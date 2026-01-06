@@ -67,6 +67,11 @@ class TrainMonitor {
         
         // Alert system
         this.alertSystem = new AlertSystem(this);
+        this.alertGeneration = {
+            timerId: null,
+            remaining: 0,
+            mode: null
+        };
         
         // Train simulation engine
         this.trainSimulation = new TrainSimulation(this);
@@ -115,6 +120,8 @@ class TrainMonitor {
         
         // Generate train icons for the bottom panel
         this.generateTrainIcons();
+
+        this.autoStartFirstLoad();
         
         this.initialized = true;
     }
@@ -139,7 +146,11 @@ class TrainMonitor {
         });
         
         // Create transport layer (shows railways prominently)
-        this.transportLayer = L.tileLayer('https://tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=6170aad10dfd42a38d4d8c709a536f38', {
+        const thunderforestKey = (window.APP_CONFIG && window.APP_CONFIG.thunderforestApiKey) || '';
+        const transportUrl = thunderforestKey
+            ? `https://tile.thunderforest.com/transport/{z}/{x}/{y}.png?apikey=${thunderforestKey}`
+            : 'https://tile.thunderforest.com/transport/{z}/{x}/{y}.png';
+        this.transportLayer = L.tileLayer(transportUrl, {
             attribution: '© Thunderforest, © OpenStreetMap contributors',
             opacity: 0.7,
             maxZoom: 18
@@ -471,6 +482,7 @@ class TrainMonitor {
             this.isPaused = false;
             this.isRunning = true;
             this.uiControls.updateStatus('Running');
+            this.startAlertGeneration('single');
             return;
         }
 
@@ -501,6 +513,13 @@ class TrainMonitor {
         
         // Start the unified simulation engine
         this.simulationEngine.start();
+
+        const leftSidebar = document.getElementById('leftSidebar');
+        if (leftSidebar && !leftSidebar.classList.contains('open')) {
+            this.uiControls.toggleLeftSidebar();
+        }
+
+        this.startAlertGeneration('single');
     } catch (error) {
         console.error('❌ Error starting simulation:', error);
         this.isRunning = false;
@@ -532,8 +551,126 @@ class TrainMonitor {
         if (this.simulationEngine) {
             this.simulationEngine.stop();
         }
-        
+
+        this.stopAlertGeneration();
+
         this.uiControls.updateStatus('Stopped');
+    }
+
+    startAlertGeneration(mode) {
+        if (!window.generateAlerts) {
+            return;
+        }
+
+        this.stopAlertGeneration();
+
+        const totalAlerts = 5 + Math.floor(Math.random() * 4);
+        this.alertGeneration = {
+            timerId: null,
+            remaining: totalAlerts,
+            mode: mode
+        };
+
+        this.scheduleNextAlert();
+    }
+
+    stopAlertGeneration() {
+        if (this.alertGeneration && this.alertGeneration.timerId) {
+            clearTimeout(this.alertGeneration.timerId);
+        }
+        this.alertGeneration = {
+            timerId: null,
+            remaining: 0,
+            mode: null
+        };
+    }
+
+    scheduleNextAlert() {
+        if (!this.alertGeneration || this.alertGeneration.remaining <= 0) {
+            return;
+        }
+
+        const delay = 5000 + Math.random() * 7000;
+        this.alertGeneration.timerId = setTimeout(() => {
+            this.runAlertGeneration();
+        }, delay);
+    }
+
+    async runAlertGeneration() {
+        if (!window.generateAlerts) {
+            this.stopAlertGeneration();
+            return;
+        }
+
+        if (this.alertGeneration.mode === 'single') {
+            if (!this.isRunning || this.isPaused) {
+                this.scheduleNextAlert();
+                return;
+            }
+        } else if (this.alertGeneration.mode === 'multi') {
+            const mts = window.multiTrainSystem;
+            const isPaused = mts && mts.simulationEngine && mts.simulationEngine.isPaused;
+            if (!mts || !mts.isRunning || isPaused) {
+                this.scheduleNextAlert();
+                return;
+            }
+        }
+
+        if (!window.publishEvents) {
+            this.scheduleNextAlert();
+            return;
+        }
+
+        const alertTypes = ['water_tank', 'breakdown', 'ac_malfunction', 'emergency'];
+
+        let trainNumber = null;
+        let trainData = null;
+        if (this.alertGeneration.mode === 'multi') {
+            const mgr = window.multiTrainSystem &&
+                window.multiTrainSystem.simulationEngine &&
+                window.multiTrainSystem.simulationEngine.multiTrainManager;
+            const trainKeys = mgr ? Array.from(mgr.trains.keys()) : [];
+            if (trainKeys.length === 0) {
+                this.stopAlertGeneration();
+                return;
+            }
+            trainNumber = trainKeys[Math.floor(Math.random() * trainKeys.length)];
+            trainData = mgr.trains.get(trainNumber);
+        } else {
+            trainNumber = this.currentTrainNumber;
+            trainData = this.currentTrainData;
+        }
+
+        if (!trainNumber) {
+            this.stopAlertGeneration();
+            return;
+        }
+
+        const alertType = alertTypes[Math.floor(Math.random() * alertTypes.length)];
+        const coachNumber = this.getRandomCoachNumber(trainData);
+        await this.alertSystem.raiseAlert(trainNumber, alertType, coachNumber);
+
+        this.alertGeneration.remaining -= 1;
+        this.scheduleNextAlert();
+    }
+
+    getRandomCoachNumber(trainData) {
+        const coachList = trainData && trainData.coaches ? String(trainData.coaches) : '';
+        if (coachList) {
+            const coaches = coachList.split(/[,/\\s]+/).map(item => item.trim()).filter(Boolean);
+            if (coaches.length > 0) {
+                return coaches[Math.floor(Math.random() * coaches.length)];
+            }
+        }
+
+        const coachCountRaw = trainData && trainData.coachCount ? String(trainData.coachCount) : '';
+        const coachCount = parseInt(coachCountRaw, 10);
+        if (Number.isFinite(coachCount) && coachCount > 0) {
+            const coachIndex = 1 + Math.floor(Math.random() * coachCount);
+            return `C${coachIndex}`;
+        }
+
+        return 'Unknown';
     }
     
     // Removed duplicate method - using uiControls.updateStatus() instead
@@ -810,7 +947,7 @@ class TrainMonitor {
         
         try {
             // Note: Legacy train/status/* and train/position/* subscriptions removed
-            // All train events are now handled through TMS topics (tms/train/*, tms/station/*, tms/alert/*)
+            // All train events are now handled through TMS topics (tms/train/v1/*, tms/station/v1/*, tms/alert/v1/*)
         } catch (error) {
             console.error('❌ Failed to set up Solace subscriptions:', error);
         }
@@ -1262,11 +1399,20 @@ class TrainMonitor {
 
                 const text = document.createElement('span');
                 text.className = 'alert-train-text';
+                const alertTypeLabel = alertType.replace(/_/g, ' ');
                 if (alerts.length === 1) {
-                    text.textContent = `${alerts[0].trainNumber} - ${alerts[0].trainName}`;
+                    const coach = alerts[0].coachNumber || 'Unknown';
+                    text.textContent = `${alertTypeLabel}: ${alerts[0].trainNumber} - ${alerts[0].trainName} (Coach ${coach})`;
                 } else {
-                    const uniqueTrains = [...new Set(alerts.map(a => `${a.trainNumber} - ${a.trainName}`))];
-                    text.textContent = uniqueTrains.join(', ');
+                    const uniqueTrains = [
+                        ...new Set(
+                            alerts.map(a => {
+                                const coach = a.coachNumber || 'Unknown';
+                                return `${a.trainNumber} - ${a.trainName} (Coach ${coach})`;
+                            })
+                        )
+                    ];
+                    text.textContent = `${alertTypeLabel}: ${uniqueTrains.join(', ')}`;
                 }
 
                 line.appendChild(emoji);
@@ -1747,7 +1893,7 @@ class TrainMonitor {
             };
             
             // Publish alert raised event directly
-            const topic = `tms/alert/raised/${alertType}/${trainNumber}/${trainData.nextStation}`;
+            const topic = `tms/alert/v1/raised/${alertType}/${trainNumber}/${trainData.nextStation}`;
             await this.solaceIntegration.publishAlertEvent(topic, alertPayload);
             
             
@@ -1949,19 +2095,28 @@ class TrainMonitor {
         }
 
         async publishTrainArrivedDestinationEvent() {
-            // Check if event publishing is enabled
-            if (!window.publishEvents) {
-                console.log('📤 Event publishing disabled, skipping arrived_destination event');
-                return;
-            }
-            
-            if (!window.solaceTrainMonitor || !window.solaceTrainMonitor.isConnected) {
-                return;
-            }
-
             try {
                 const previousStation = this.stations[this.stations.length - 2]; // Second to last station
                 const destinationStation = this.stations[this.stations.length - 1];
+                // Always clear unserved alerts at destination, even if publishing is disabled.
+                if (window.eventManager && destinationStation) {
+                    window.eventManager.clearUnservedAlertsAtDestination(
+                        this.currentTrainNumber, 
+                        destinationStation.code, 
+                        destinationStation.name
+                    );
+                }
+
+                // Check if event publishing is enabled
+                if (!window.publishEvents) {
+                    console.log('📤 Event publishing disabled, skipping arrived_destination event');
+                    return;
+                }
+                
+                if (!window.solaceTrainMonitor || !window.solaceTrainMonitor.isConnected) {
+                    return;
+                }
+
                 const trainData = {
                     trainNumber: this.currentTrainNumber || '',
                     trainName: this.currentTrainName || '',
@@ -1974,17 +2129,6 @@ class TrainMonitor {
                 };
 
                 await window.solaceTrainMonitor.publishTrainArrivedDestination(trainData);
-                
-                // Clear any unserved alerts at the destination station
-                
-                if (window.eventManager && destinationStation) {
-                    window.eventManager.clearUnservedAlertsAtDestination(
-                        this.currentTrainNumber, 
-                        destinationStation.code, 
-                        destinationStation.name
-                    );
-                } else {
-                }
             } catch (error) {
                 console.error('Error publishing train arrived destination event:', error);
             }
@@ -3353,6 +3497,115 @@ class TrainMonitor {
             closePopup();
         }, 10000);
     }
+
+    async autoStartFirstLoad() {
+        try {
+            const response = await fetch('assets/data/vandebharath.csv');
+            if (!response.ok) {
+                throw new Error(`Failed to load CSV: ${response.status}`);
+            }
+            const csvText = await response.text();
+            const trains = this.parseAvailableTrains(csvText);
+            if (!trains || trains.length === 0) {
+                return;
+            }
+
+            const chosenTrain = trains[Math.floor(Math.random() * trains.length)];
+            const optionText = `${chosenTrain.number} - ${chosenTrain.name} (${chosenTrain.source} -> ${chosenTrain.destination})`;
+            if (this.uiControls && this.uiControls.selectOption) {
+                await this.uiControls.selectOption({
+                    value: chosenTrain.number,
+                    text: optionText
+                });
+            } else {
+                this.selectedTrainValue = chosenTrain.number;
+            }
+
+            await this.trainDataManager.searchTrain(chosenTrain.number);
+            this.showAutoStartPopup(chosenTrain);
+        } catch (error) {
+            console.error('❌ Auto-start failed:', error);
+        }
+    }
+
+    showAutoStartPopup(trainInfo) {
+        const popup = document.createElement('div');
+        popup.className = 'auto-sim-popup';
+
+        const brokerMode = window.brokerMode || (window.solaceTrainMonitor && window.solaceTrainMonitor.brokerType) || 'unknown';
+        const brokerConnected = typeof window.brokerConnected === 'boolean' ? window.brokerConnected :
+            (window.solaceTrainMonitor && !!window.solaceTrainMonitor.isConnected);
+        let brokerStatusText = `${brokerMode} (Connecting...)`;
+        if (brokerMode === 'inmemory') {
+            brokerStatusText = 'No broker available, using local in-memory broker';
+        } else if (brokerConnected) {
+            brokerStatusText = `${brokerMode} broker connected`;
+        }
+
+        let countdownTimer = null;
+        const closePopup = () => {
+            if (popup.parentElement) {
+                popup.remove();
+            }
+            if (countdownTimer) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+        };
+
+        popup.innerHTML = `
+            <div class="popup-content">
+                <div class="popup-header">
+                    <h3>Auto-Starting Simulation</h3>
+                    <button class="popup-close" aria-label="Close" type="button">×</button>
+                </div>
+                <div class="popup-body">
+                    <p>Selected train for this session:</p>
+                    <div class="popup-hint">
+                        <strong>${trainInfo.number} - ${trainInfo.name}</strong><br/>
+                        Route: ${trainInfo.source} -> ${trainInfo.destination}
+                    </div>
+                    <p style="margin-top: 16px;">Broker status: <strong>${brokerStatusText}</strong></p>
+                    <p>Starting simulation with default settings in <strong><span id="autoStartCountdown">5</span></strong> seconds.</p>
+                </div>
+                <div class="popup-footer">
+                    <button class="btn btn-primary" type="button">Start Now</button>
+                </div>
+            </div>
+        `;
+
+        const closeBtn = popup.querySelector('.popup-close');
+        const startBtn = popup.querySelector('.btn-primary');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => closePopup());
+        }
+        if (startBtn) {
+            startBtn.addEventListener('click', async () => {
+                closePopup();
+                await this.play();
+            });
+        }
+
+        document.body.appendChild(popup);
+
+        const countdownEl = popup.querySelector('#autoStartCountdown');
+        let remainingSeconds = 5;
+        countdownTimer = setInterval(() => {
+            remainingSeconds -= 1;
+            if (countdownEl) {
+                countdownEl.textContent = String(Math.max(remainingSeconds, 0));
+            }
+            if (remainingSeconds <= 0) {
+                clearInterval(countdownTimer);
+                countdownTimer = null;
+            }
+        }, 1000);
+
+        setTimeout(async () => {
+            closePopup();
+            await this.play();
+        }, 5000);
+    }
     
 }
 
@@ -3492,4 +3745,3 @@ loadStationCoordinates().then(coordinates => {
 document.addEventListener('DOMContentLoaded', function() {
     window.trainMonitorInstance = new TrainMonitor();
 });
-

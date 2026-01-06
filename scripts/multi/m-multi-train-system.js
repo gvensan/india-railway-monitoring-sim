@@ -122,6 +122,9 @@ class MultiTrainSystem {
             this.simulationEngine.start();
             
             this.isRunning = true;
+            if (window.trainMonitorInstance && window.trainMonitorInstance.startAlertGeneration) {
+                window.trainMonitorInstance.startAlertGeneration('multi');
+            }
             console.log('✅ MultiTrainSystem: Simulation started successfully');
         } catch (error) {
             console.error('❌ MultiTrainSystem: Failed to start simulation:', error);
@@ -153,6 +156,9 @@ class MultiTrainSystem {
             this.uiControls.hideSimulationControls();
             
             this.isRunning = false;
+            if (window.trainMonitorInstance && window.trainMonitorInstance.stopAlertGeneration) {
+                window.trainMonitorInstance.stopAlertGeneration();
+            }
             console.log('✅ MultiTrainSystem: Stopped successfully');
         } catch (error) {
             console.error('❌ MultiTrainSystem: Failed to stop:', error);

@@ -6,6 +6,13 @@
 class TooltipSystem {
     constructor(trainMonitor) {
         this.trainMonitor = trainMonitor;
+        this.activeTooltipElement = null;
+        this._escapeHandler = (e) => {
+            if (e.key === 'Escape' && this.activeTooltipElement) {
+                this.hideClickTooltip(this.activeTooltipElement);
+            }
+        };
+        document.addEventListener('keydown', this._escapeHandler);
     }
 
     /**
@@ -178,14 +185,6 @@ class TooltipSystem {
             this.showClickTooltip(marker, tooltipElement);
         });
         
-        // ESC key to close
-        const escapeHandler = (e) => {
-            if (e.key === 'Escape' && tooltipElement.style.display !== 'none') {
-                this.hideClickTooltip(tooltipElement);
-            }
-        };
-        document.addEventListener('keydown', escapeHandler);
-        marker._escapeHandler = escapeHandler;
     }
 
     /**
@@ -210,6 +209,7 @@ class TooltipSystem {
         // Show tooltip
         tooltipElement.style.display = 'block';
         tooltipElement.style.opacity = '1';
+        this.activeTooltipElement = tooltipElement;
     }
 
     /**
@@ -221,6 +221,9 @@ class TooltipSystem {
         setTimeout(() => {
             tooltipElement.style.display = 'none';
         }, 200);
+        if (this.activeTooltipElement === tooltipElement) {
+            this.activeTooltipElement = null;
+        }
     }
 
     /**
@@ -339,10 +342,10 @@ class TooltipSystem {
                         </div>
                         <div class="alert-icons" style="margin-right: 12px;">
                             <label style="display: block; font-size: 12px; color: #6c757d; margin-bottom: 4px;">Alerts:</label>
-                            <button class="alert-icon-btn" title="Water tank alerts for service needs" style="background: #17a2b866; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 14px; color: white;" onclick="window.raiseTrainAlert('${trainData.trainNumber}', 'water_tank', this.parentElement.parentElement.querySelector('select').value)">💧</button>
-                            <button class="alert-icon-btn" title="Breakdown alerts for mechanical issues" style="background: #ffc10766; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 14px; color: #212529;" onclick="window.raiseTrainAlert('${trainData.trainNumber}', 'breakdown', this.parentElement.parentElement.querySelector('select').value)">🔧</button>
-                            <button class="alert-icon-btn" title="AC malfunction alerts for comfort issues" style="background: #6f42c166; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 14px; color: white;" onclick="window.raiseTrainAlert('${trainData.trainNumber}', 'ac_malfunction', this.parentElement.parentElement.querySelector('select').value)">❄️</button>
-                            <button class="alert-icon-btn" title="Emergency alerts for critical situations" style="background: #dc354566; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 14px; color: white;" onclick="window.raiseTrainAlert('${trainData.trainNumber}', 'emergency', this.parentElement.parentElement.querySelector('select').value)">🚨</button>
+                            <button class="alert-icon-btn" title="Water tank alerts for service needs" style="background: #17a2b866; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 14px; color: white;" onclick="window.raiseTrainAlert('${trainData.trainNumber}', 'water_tank', this.parentElement.parentElement.querySelector('select').value); this.closest('.simple-tooltip').style.opacity='0'; setTimeout(() => this.closest('.simple-tooltip').style.display='none', 200);">💧</button>
+                            <button class="alert-icon-btn" title="Breakdown alerts for mechanical issues" style="background: #ffc10766; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 14px; color: #212529;" onclick="window.raiseTrainAlert('${trainData.trainNumber}', 'breakdown', this.parentElement.parentElement.querySelector('select').value); this.closest('.simple-tooltip').style.opacity='0'; setTimeout(() => this.closest('.simple-tooltip').style.display='none', 200);">🔧</button>
+                            <button class="alert-icon-btn" title="AC malfunction alerts for comfort issues" style="background: #6f42c166; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 14px; color: white;" onclick="window.raiseTrainAlert('${trainData.trainNumber}', 'ac_malfunction', this.parentElement.parentElement.querySelector('select').value); this.closest('.simple-tooltip').style.opacity='0'; setTimeout(() => this.closest('.simple-tooltip').style.display='none', 200);">❄️</button>
+                            <button class="alert-icon-btn" title="Emergency alerts for critical situations" style="background: #dc354566; border: none; border-radius: 4px; padding: 6px; cursor: pointer; font-size: 14px; color: white;" onclick="window.raiseTrainAlert('${trainData.trainNumber}', 'emergency', this.parentElement.parentElement.querySelector('select').value); this.closest('.simple-tooltip').style.opacity='0'; setTimeout(() => this.closest('.simple-tooltip').style.display='none', 200);">🚨</button>
                         </div>
                     </div>
                 `;
